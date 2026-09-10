@@ -567,7 +567,20 @@ export const assignGroupUsers = async (req: Request, res: Response) => {
       let batch = db.batch();
       let count = 0;
       for (const itemDoc of itemsSnap.docs) {
-        batch.update(itemDoc.ref, { [`values.${columnId}`]: userIds, updatedAt: timestamp });
+        // Mirror the same top-level fields a single-item PATCH computes for a PERSON column
+        // edit (see item.controller.ts's computeMirroredFields) — Personal Hub finds a user's
+        // items via `assignees array-contains` and orders them by lastAssignedAt, neither of
+        // which lives under `values`, so writing only values.<columnId> here (as this endpoint
+        // originally did) assigned the column but left it invisible in the assignee's hub.
+        const itemData = itemDoc.data() as DBItem;
+        const previousAssignees = itemData.assignees ?? [];
+        const hasNewAssignee = userIds.some((uid: string) => !previousAssignees.includes(uid));
+        batch.update(itemDoc.ref, {
+          [`values.${columnId}`]: userIds,
+          assignees: userIds,
+          updatedAt: timestamp,
+          ...(hasNewAssignee ? { lastAssignedAt: timestamp } : {}),
+        });
         count++;
         if (count % BATCH_SIZE === 0) {
           await batch.commit();
