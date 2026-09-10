@@ -142,7 +142,7 @@ const BoardListPage: React.FC = () => {
     try {
       const result = await importBoardFromXlsx(file, workspaceId);
       await queryClient.invalidateQueries({ queryKey: ['boards'] });
-      navigate(`/boards/${result.boardId}`, { state: { importSummary: result } });
+      navigate(`/boards/${result.boardId}`);
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Import failed. Please check the file format.');
     } finally {
