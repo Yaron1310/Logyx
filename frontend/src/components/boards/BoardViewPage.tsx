@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, useReducer } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   DndContext,
   DragOverlay,
@@ -31,6 +31,7 @@ import { FiLoader, FiArchive, FiChevronLeft, FiPlus, FiPlusCircle, FiMenu, FiSea
 import { UndoProvider } from '../../contexts/UndoContext';
 import UndoButton from './UndoButton';
 import { exportBoardToXlsx } from '../../utils/exportBoardToXlsx';
+import type { ImportResult } from '../../utils/importBoardFromXlsx';
 import ColumnHeader, { ITEM_COL_ID } from './ColumnHeader';
 import GanttView from './GanttView';
 import BoardDashboardView, { DashboardFilterChip, type BoardDashboardHandle } from './BoardDashboardView';
@@ -499,7 +500,20 @@ const BoardContent: React.FC<BoardContentProps> = ({
 const BoardViewPage: React.FC = () => {
   const { boardId } = useParams<{ boardId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, selectedWorkspace, isPublicView } = useAuthSession();
+
+  // Flash summary shown once right after an xlsx import navigates here (see
+  // BoardListPage/TemplatesPage) — surfaces subitem counts and any parsing
+  // caveats (e.g. status options an import can't recover) that a bare
+  // navigate-on-success wouldn't otherwise show.
+  const [importSummary, setImportSummary] = useState<ImportResult | null>(
+    () => (location.state as { importSummary?: ImportResult } | null)?.importSummary ?? null,
+  );
+  const dismissImportSummary = () => {
+    setImportSummary(null);
+    navigate(location.pathname, { replace: true });
+  };
 
   const pageSize = usePageSize();
   const { data: board, isLoading, error } = useBoard(boardId ?? '', !!boardId);
@@ -900,6 +914,33 @@ const BoardViewPage: React.FC = () => {
   return (
     <UndoProvider>
       <div className="flex flex-col h-full min-h-0">
+        {importSummary && (
+          <div
+            role="status"
+            className="flex-shrink-0 px-6 py-3 bg-indigo-50 border-b border-indigo-200 text-sm text-indigo-900 flex items-start gap-3"
+          >
+            <div className="flex-1 min-w-0">
+              <p>
+                Imported {importSummary.groupCount} group{importSummary.groupCount === 1 ? '' : 's'}, {importSummary.itemCount} item{importSummary.itemCount === 1 ? '' : 's'}
+                {!!importSummary.subitemCount && `, and ${importSummary.subitemCount} subitem${importSummary.subitemCount === 1 ? '' : 's'}`}.
+              </p>
+              {!!importSummary.warnings?.length && (
+                <ul className="mt-1 list-disc list-inside text-indigo-700">
+                  {importSummary.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                </ul>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={dismissImportSummary}
+              className="text-indigo-400 hover:text-indigo-600 transition-colors rounded p-1 flex-shrink-0"
+              aria-label="Dismiss import summary"
+            >
+              <FiX size={16} aria-hidden="true" />
+            </button>
+          </div>
+        )}
+
         {/* Board top bar */}
         <div className="flex-shrink-0 px-6 py-3 border-b border-gray-200 bg-white flex items-center gap-3">
           {!isPublicView && (

@@ -97,7 +97,7 @@ const TemplatesPage: React.FC = () => {
     try {
       const result = await importBoardFromXlsx(file, firstRealWorkspace.id);
       await queryClient.invalidateQueries({ queryKey: ['boards'] });
-      navigate(`/boards/${result.boardId}`);
+      navigate(`/boards/${result.boardId}`, { state: { importSummary: result } });
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Import failed. Please check the file format.');
     } finally {
