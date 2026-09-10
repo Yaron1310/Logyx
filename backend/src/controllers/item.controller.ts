@@ -2,8 +2,8 @@ import type { Request, Response } from 'express';
 import * as logger from 'firebase-functions/logger';
 import admin from 'firebase-admin';
 import { db, storage, querySnapshotToArray, snapshotToData } from '../services/firestore.service.js';
-import { itemsCollection, columnsCollection, boardMembersCollection, notificationsCollection, usersCollection, boardsCollection, organizationsCollection } from '../db/collections.js';
-import { JwtUserPayload, DBItem, DBColumn, DBUser, DBBoard, DBBoardMember, ColumnType, NotificationType } from '../types/index.js';
+import { itemsCollection, columnsCollection, boardMembersCollection, notificationsCollection, usersCollection } from '../db/collections.js';
+import { JwtUserPayload, DBItem, DBColumn, DBUser, DBBoardMember, ColumnType, NotificationType } from '../types/index.js';
 import { sanitizeText } from '../utils/sanitizer.js';
 import { logAudit, logAuditAndCheckAnomaly, getClientIp } from '../services/audit.service.js';
 import {
@@ -16,6 +16,7 @@ import { ALLOWED_ATTACHMENT_MIME_TYPES, buildContentDisposition } from '../utils
 import { parsePaginationParams, applyPagination, buildPaginatedResult } from '../utils/pagination.js';
 import { touchBoardVersion } from '../services/boardVersion.service.js';
 import { sendItemAssignmentEmail } from '../services/email.service.js';
+import { getActorName, getBoardName, getOrganizationName } from '../utils/notificationHelpers.js';
 
 function isAuthError(err: unknown): err is { status: number; message: string } {
   return typeof err === 'object' && err !== null && 'status' in err && 'message' in err;
@@ -100,21 +101,6 @@ async function computeMirroredFields(
 function extractMentions(text: string): string[] {
   const matches = text.match(/@[a-zA-Z0-9_-]+/g) ?? [];
   return matches.map((m) => m.slice(1));
-}
-
-async function getActorName(actorId: string): Promise<string> {
-  const doc = await usersCollection.doc(actorId).get();
-  return doc.exists ? (doc.data() as DBUser).name : actorId;
-}
-
-async function getBoardName(orgId: string, boardId: string): Promise<string> {
-  const doc = await boardsCollection(orgId).doc(boardId).get();
-  return doc.exists ? (doc.data() as DBBoard).name : boardId;
-}
-
-async function getOrganizationName(orgId: string): Promise<string> {
-  const doc = await organizationsCollection.doc(orgId).get();
-  return doc.exists ? (doc.data()?.name || 'Logyx') : 'Logyx';
 }
 
 function triggerItemNotifications(

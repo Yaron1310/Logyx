@@ -529,6 +529,37 @@ export const sendItemAssignmentEmail = async (
 
 // ---------------------------------------------------------------------------
 
+export const sendBulkAssignmentEmail = async (
+    toEmail: string,
+    toName: string,
+    actorName: string,
+    groupName: string,
+    boardName: string,
+    itemCount: number,
+    organizationName = 'Logyx',
+): Promise<void> => {
+    await ensureTransporter();
+    if (!isEmailServiceAvailable()) return;
+
+    const esc = (s: string) => s.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const fromName = process.env.SMTP_FROM_NAME || organizationName || 'Logyx';
+    const fromEmail = process.env.SMTP_USER!;
+    const subject = `You've been assigned to "${groupName}"`;
+    const onBoard = boardName ? ` on <strong>${esc(boardName)}</strong>` : '';
+    const itemsText = `${itemCount} item${itemCount === 1 ? '' : 's'}`;
+    const html = `<p>Hello ${esc(toName)},</p>
+<p><strong>${esc(actorName)}</strong> assigned you to ${itemsText} in group <strong>${esc(groupName)}</strong>${onBoard}.</p>
+<p>Thanks,<br/>The ${esc(organizationName)} Team</p>`;
+
+    try {
+        await transporter!.sendMail({ from: `"${fromName}" <${fromEmail}>`, to: toEmail, subject, html });
+    } catch (error) {
+        logger.error(`Failed to send bulk assignment email to ${toEmail}`, error);
+    }
+};
+
+// ---------------------------------------------------------------------------
+
 export const sendUserInvitationEmail = async (
     userEmail: string,
     orgName: string,

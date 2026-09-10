@@ -120,6 +120,18 @@ export const useAssignGroupUsers = () => {
   });
 };
 
+export const useUnassignGroupUser = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ boardId, groupId, userId, columnIds }: { boardId: string; groupId: string; userId: string; columnIds: string[] }) =>
+      wm.unassignGroupUser(boardId, groupId, userId, columnIds),
+    onSuccess: (_result, { boardId }) => {
+      void qc.invalidateQueries({ queryKey: queryKeys.groups.all(boardId) });
+      void qc.invalidateQueries({ queryKey: ['items'] });
+    },
+  });
+};
+
 export const useReorderGroups = () => {
   const qc = useQueryClient();
   return useMutation({

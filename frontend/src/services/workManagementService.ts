@@ -130,8 +130,8 @@ export const duplicateGroup = (boardId: string, groupId: string, mode: Duplicate
 export const reorderGroups = (boardId: string, order: ReorderGroupItem[]): Promise<void> =>
   fetchWithAuth(`/api/boards/${boardId}/groups/reorder`, { method: 'PATCH', body: JSON.stringify({ order }) });
 
-// Bulk-sets a PERSON column to the same users on every item in the group at once — the group
-// context menu's "Assign users" action — instead of doing it item by item.
+// Bulk-sets a PERSON column to the same users on every item (and their subitems) in the group at
+// once — the group context menu's "Assign users" action — instead of doing it item by item.
 export const assignGroupUsers = (
   boardId: string,
   groupId: string,
@@ -141,6 +141,19 @@ export const assignGroupUsers = (
   fetchWithAuth(`/api/boards/${boardId}/groups/${groupId}/assign-users`, {
     method: 'POST',
     body: JSON.stringify({ columnId, userIds }),
+  });
+
+// Removes one user from one or more of the group's bulk-assigned Person columns, across every
+// item and subitem in the group — the inverse of assignGroupUsers.
+export const unassignGroupUser = (
+  boardId: string,
+  groupId: string,
+  userId: string,
+  columnIds: string[],
+): Promise<{ group: Group }> =>
+  fetchWithAuth(`/api/boards/${boardId}/groups/${groupId}/unassign-user`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, columnIds }),
   });
 
 // ─── ITEMS ────────────────────────────────────────────────────────────────────

@@ -14,21 +14,25 @@ interface AssignUsersModalProps {
   /** Every PERSON column on the board — the admin picks which one to bulk-set when there's more
    *  than one (Owner, Assignee, ...); skipped straight to the picker when there's only one. */
   personColumns: Column[];
-  initialColumnId?: string;
-  initialUserIds?: string[];
+  /** Existing bulk-assign record, keyed by PERSON column id — lets the picker default to
+   *  whichever users are already recorded for whichever column ends up selected. */
+  assignedByColumn?: Record<string, string[]>;
   onClose: () => void;
 }
 
 const AssignUsersModal: React.FC<AssignUsersModalProps> = ({
-  boardId, groupId, groupName, personColumns, initialColumnId, initialUserIds, onClose,
+  boardId, groupId, groupName, personColumns, assignedByColumn, onClose,
 }) => {
-  const [columnId, setColumnId] = useState(
-    () => (initialColumnId && personColumns.some((c) => c.id === initialColumnId) ? initialColumnId : personColumns[0]?.id ?? ''),
-  );
-  const [selected, setSelected] = useState<string[]>(initialUserIds ?? []);
+  const [columnId, setColumnId] = useState(() => personColumns[0]?.id ?? '');
+  const [selected, setSelected] = useState<string[]>(() => assignedByColumn?.[columnId] ?? []);
   const [search, setSearch] = useState('');
   const [boardMembersOnly, setBoardMembersOnly] = useState(true);
   const [error, setError] = useState('');
+
+  const handleColumnChange = (nextColumnId: string) => {
+    setColumnId(nextColumnId);
+    setSelected(assignedByColumn?.[nextColumnId] ?? []);
+  };
 
   const { data: allUsers = [] } = useUsersQuery({ limit: 200 });
   const { data: boardParticipants, isSuccess: participantsLoaded } = useBoardParticipants(boardId, true, true);
@@ -97,7 +101,7 @@ const AssignUsersModal: React.FC<AssignUsersModalProps> = ({
               <select
                 id="assign-users-column"
                 value={columnId}
-                onChange={(e) => setColumnId(e.target.value)}
+                onChange={(e) => handleColumnChange(e.target.value)}
                 className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 {personColumns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}

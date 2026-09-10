@@ -21,6 +21,7 @@ groupRouter.patch('/:groupId/archive', groupController.archiveGroup);
 groupRouter.patch('/:groupId/restore', groupController.restoreGroup);
 groupRouter.post('/:groupId/duplicate', groupController.duplicateGroup);
 groupRouter.post('/:groupId/assign-users', groupController.assignGroupUsers);
+groupRouter.post('/:groupId/unassign-user', groupController.unassignGroupUser);
 
 // Single group CRUD
 groupRouter.patch('/:groupId', groupController.updateGroup);

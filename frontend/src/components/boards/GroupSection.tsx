@@ -21,7 +21,7 @@ import GroupSummaryRow from './GroupSummaryRow';
 import GroupWebhookModal from './GroupWebhookModal';
 import AssignUsersModal from './AssignUsersModal';
 import ColorPickerPopover from './ColorPickerPopover';
-import { Avatar } from './Avatar';
+import GroupAssignedUserBadge from './GroupAssignedUserBadge';
 import { COLUMN_TYPE_ICONS, ITEM_COL_ID } from './ColumnHeader';
 import { calculateColumnWidth, DRAG_HANDLE_WIDTH } from '../../utils/columnWidths';
 import { useBoardRender } from '../../contexts/BoardRenderContext';
@@ -96,9 +96,14 @@ const GroupSection: React.FC<GroupSectionProps> = ({
   const [showAssignUsersModal, setShowAssignUsersModal] = useState(false);
 
   const personColumns = columns.filter((c) => c.type === ColumnType.PERSON);
+  const assignedByColumn = group.assignedByColumn ?? {};
+  // Union of every column's bulk-assigned list, deduped — a user assigned via any Person column
+  // shows one avatar, regardless of how many columns they're recorded under.
+  const assignedUserIds = [...new Set(Object.values(assignedByColumn).flat())];
   // Only fetched once a group actually has a bulk assignment to show — most groups won't.
-  const { data: usersForAssignedBadge = [] } = useUsersQuery({ limit: 200 }, (group.assignedUserIds?.length ?? 0) > 0);
-  const assignedUsers = usersForAssignedBadge.filter((u) => group.assignedUserIds?.includes(u.id));
+  const { data: usersForAssignedBadge = [] } = useUsersQuery({ limit: 200 }, assignedUserIds.length > 0);
+  const assignedUsers = usersForAssignedBadge.filter((u) => assignedUserIds.includes(u.id));
+  const personColumnsForUser = (userId: string) => personColumns.filter((c) => assignedByColumn[c.id]?.includes(userId));
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0);
@@ -653,18 +658,27 @@ const GroupSection: React.FC<GroupSectionProps> = ({
         )}
 
         {/* Group-level bulk assignment badge — set via "Assign users" above; a record of that
-            action, not a live rollup of each item's current Person value. */}
+            action, not a live rollup of each item's current Person value. Hover an avatar to
+            remove that person (from whichever column(s) they're recorded under). */}
         {assignedUsers.length > 0 && (
           <div
             className="flex items-center -space-x-1.5 flex-shrink-0"
             aria-label={`Group assigned to ${assignedUsers.map((u) => u.name).join(', ')}`}
-            title={assignedUsers.map((u) => u.name).join(', ')}
           >
             {assignedUsers.slice(0, 4).map((u) => (
-              <Avatar key={u.id} user={u} size="h-6 w-6" textSize="text-[10px]" />
+              <GroupAssignedUserBadge
+                key={u.id}
+                user={u}
+                boardId={boardId}
+                groupId={group.id}
+                columnsForUser={personColumnsForUser(u.id)}
+              />
             ))}
             {assignedUsers.length > 4 && (
-              <div className="h-6 w-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] text-gray-600 border-2 border-gray-300 flex-shrink-0">
+              <div
+                className="h-6 w-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] text-gray-600 border-2 border-gray-300 flex-shrink-0"
+                title={assignedUsers.slice(4).map((u) => u.name).join(', ')}
+              >
                 +{assignedUsers.length - 4}
               </div>
             )}
@@ -678,8 +692,7 @@ const GroupSection: React.FC<GroupSectionProps> = ({
           groupId={group.id}
           groupName={group.name}
           personColumns={personColumns}
-          initialColumnId={group.assignedColumnId}
-          initialUserIds={group.assignedUserIds}
+          assignedByColumn={assignedByColumn}
           onClose={() => setShowAssignUsersModal(false)}
         />
       )}
