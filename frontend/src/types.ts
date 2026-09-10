@@ -393,6 +393,13 @@ export interface Group {
   parentItemId?: string;
   /** Per-column cumulative summary scope (columnId -> include groups above), independent per group. */
   summaryCumulative?: Record<string, boolean>;
+  /** Last bulk "Assign users" action on this group — a record of that action for the group title
+   *  row to display, not a live rollup of what each item currently holds (an item can be edited
+   *  individually afterward without this changing). */
+  assignedUserIds?: string[];
+  /** The PERSON column assignedUserIds was written to, so re-opening "Assign users" can default
+   *  back to the same column. */
+  assignedColumnId?: string;
   createdAt: Date | string;
   updatedAt: Date | string;
 }

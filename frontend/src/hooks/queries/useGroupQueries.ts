@@ -108,6 +108,18 @@ export const useDuplicateGroup = () => {
   });
 };
 
+export const useAssignGroupUsers = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ boardId, groupId, columnId, userIds }: { boardId: string; groupId: string; columnId: string; userIds: string[] }) =>
+      wm.assignGroupUsers(boardId, groupId, columnId, userIds),
+    onSuccess: (_result, { boardId }) => {
+      void qc.invalidateQueries({ queryKey: queryKeys.groups.all(boardId) });
+      void qc.invalidateQueries({ queryKey: ['items'] });
+    },
+  });
+};
+
 export const useReorderGroups = () => {
   const qc = useQueryClient();
   return useMutation({

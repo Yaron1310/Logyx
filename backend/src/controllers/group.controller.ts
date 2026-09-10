@@ -2,8 +2,8 @@ import type { Request, Response } from 'express';
 import * as logger from 'firebase-functions/logger';
 import admin from 'firebase-admin';
 import { db, querySnapshotToArray, snapshotToData } from '../services/firestore.service.js';
-import { boardsCollection, groupsCollection, boardMembersCollection, itemsCollection } from '../db/collections.js';
-import { JwtUserPayload, DBBoard, DBGroup, DBBoardMember, DBItem } from '../types/index.js';
+import { boardsCollection, groupsCollection, boardMembersCollection, itemsCollection, columnsCollection } from '../db/collections.js';
+import { JwtUserPayload, DBBoard, DBGroup, DBBoardMember, DBItem, DBColumn, ColumnType } from '../types/index.js';
 import { sanitizeText } from '../utils/sanitizer.js';
 import { logAudit, getClientIp } from '../services/audit.service.js';
 import {
@@ -508,5 +508,102 @@ export const duplicateGroup = async (req: Request, res: Response) => {
     if (isAuthError(err)) return res.status(err.status).json({ message: err.message });
     logger.error(`Error duplicating group ${req.params.groupId}:`, err);
     res.status(500).json({ message: 'Failed to duplicate group.' });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// POST /boards/:boardId/groups/:groupId/assign-users
+//
+// Bulk-sets a PERSON column to the same list of users on every (non-archived)
+// item currently in this group — the "assign a user to a whole group at once"
+// action from the group's context menu, instead of doing it item by item.
+// Also stamps assignedUserIds/assignedColumnId on the group itself purely so
+// the group title row can keep showing who it was last bulk-assigned to; that
+// stamp is a record of this action, not a live rollup of each item's current
+// value (an item can still be edited individually afterward without it
+// changing what the header shows).
+// ---------------------------------------------------------------------------
+export const assignGroupUsers = async (req: Request, res: Response) => {
+  const user = req.user as JwtUserPayload;
+  const { boardId, groupId } = req.params;
+  const { columnId, userIds } = req.body;
+
+  if (typeof columnId !== 'string' || !columnId) {
+    return res.status(400).json({ message: 'columnId is required.' });
+  }
+  if (!Array.isArray(userIds) || !userIds.every((v) => typeof v === 'string')) {
+    return res.status(400).json({ message: 'userIds must be an array of user id strings.' });
+  }
+
+  try {
+    const boardDoc = await boardsCollection(user.orgId).doc(boardId).get();
+    if (!boardDoc.exists) return res.status(404).json({ message: 'Board not found.' });
+    const board = snapshotToData<DBBoard>(boardDoc)!;
+
+    const groupDoc = await groupsCollection(user.orgId, boardId).doc(groupId).get();
+    if (!groupDoc.exists) return res.status(404).json({ message: 'Group not found.' });
+    const group = snapshotToData<DBGroup>(groupDoc)!;
+
+    const memberDoc = await boardMembersCollection(user.orgId, boardId).doc(user.id).get();
+    const memberData = memberDoc.exists ? memberDoc.data() as DBBoardMember : null;
+    assertGroupAccess(user, group, 'update', board.createdBy, memberData, board.workspaceId);
+
+    const colDoc = await columnsCollection(user.orgId, boardId).doc(columnId).get();
+    if (!colDoc.exists) return res.status(404).json({ message: 'Column not found.' });
+    const column = snapshotToData<DBColumn>(colDoc)!;
+    if (column.type !== ColumnType.PERSON) {
+      return res.status(400).json({ message: `Column "${column.name}" is not a Person column.` });
+    }
+
+    const itemsSnap = await itemsCollection(user.orgId)
+      .where('boardId', '==', boardId)
+      .where('groupId', '==', groupId)
+      .where('isArchived', '==', false)
+      .get();
+
+    const timestamp = admin.firestore.FieldValue.serverTimestamp();
+    if (!itemsSnap.empty) {
+      const BATCH_SIZE = 400;
+      let batch = db.batch();
+      let count = 0;
+      for (const itemDoc of itemsSnap.docs) {
+        batch.update(itemDoc.ref, { [`values.${columnId}`]: userIds, updatedAt: timestamp });
+        count++;
+        if (count % BATCH_SIZE === 0) {
+          await batch.commit();
+          batch = db.batch();
+        }
+      }
+      if (count % BATCH_SIZE !== 0) await batch.commit();
+    }
+
+    await groupsCollection(user.orgId, boardId).doc(groupId).update({
+      assignedUserIds: userIds,
+      assignedColumnId: columnId,
+      updatedAt: timestamp,
+    });
+
+    touchBoardVersion(user.orgId, boardId);
+
+    void logAudit({
+      actorUserId: user.id,
+      actorRole: user.role,
+      action: 'UPDATE',
+      resourceType: 'group',
+      resourceId: groupId,
+      workspaceId: user.orgId,
+      orgId: user.orgId,
+      ipAddress: getClientIp(req),
+      userAgent: req.headers['user-agent'] as string | undefined,
+    });
+
+    const updated = snapshotToData<DBGroup>(
+      await groupsCollection(user.orgId, boardId).doc(groupId).get(),
+    );
+    res.json({ group: updated, itemCount: itemsSnap.size });
+  } catch (err: unknown) {
+    if (isAuthError(err)) return res.status(err.status).json({ message: err.message });
+    logger.error(`Error assigning users for group ${req.params.groupId}:`, err);
+    res.status(500).json({ message: 'Failed to assign users.' });
   }
 };

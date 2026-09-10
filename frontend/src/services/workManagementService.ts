@@ -130,6 +130,19 @@ export const duplicateGroup = (boardId: string, groupId: string, mode: Duplicate
 export const reorderGroups = (boardId: string, order: ReorderGroupItem[]): Promise<void> =>
   fetchWithAuth(`/api/boards/${boardId}/groups/reorder`, { method: 'PATCH', body: JSON.stringify({ order }) });
 
+// Bulk-sets a PERSON column to the same users on every item in the group at once — the group
+// context menu's "Assign users" action — instead of doing it item by item.
+export const assignGroupUsers = (
+  boardId: string,
+  groupId: string,
+  columnId: string,
+  userIds: string[],
+): Promise<{ group: Group; itemCount: number }> =>
+  fetchWithAuth(`/api/boards/${boardId}/groups/${groupId}/assign-users`, {
+    method: 'POST',
+    body: JSON.stringify({ columnId, userIds }),
+  });
+
 // ─── ITEMS ────────────────────────────────────────────────────────────────────
 
 export interface CreateItemData {
