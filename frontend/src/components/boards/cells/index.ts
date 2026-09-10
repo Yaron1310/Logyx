@@ -15,3 +15,4 @@ export { default as LocationCell } from './LocationCell';
 export { default as TimeRangeCell } from './TimeRangeCell';
 export { default as SimpleFormulaCell } from './SimpleFormulaCell';
 export { default as LinkCell } from './LinkCell';
+export { default as HoursLogCell } from './HoursLogCell';

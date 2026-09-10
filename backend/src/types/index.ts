@@ -256,6 +256,7 @@ export enum ColumnType {
   LINK = 'link',
   TIME_RANGE = 'time_range',
   SIMPLE_FORMULA = 'simple_formula',
+  HOURS_LOG = 'hours_log',
 }
 
 // --- Column settings per type ---

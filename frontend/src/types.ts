@@ -174,6 +174,7 @@ export enum ColumnType {
   LINK = 'link',
   TIME_RANGE = 'time_range',
   SIMPLE_FORMULA = 'simple_formula',
+  HOURS_LOG = 'hours_log',
 }
 
 // --- Column settings per type ---
@@ -238,6 +239,8 @@ export interface SimpleFormulaColumnSettings {
 
 export type LinkColumnSettings = Record<string, never>;
 
+export type HoursLogColumnSettings = Record<string, never>;
+
 export type ColumnSettings =
   | TextColumnSettings
   | NumberColumnSettings
@@ -248,6 +251,7 @@ export type ColumnSettings =
   | TagsColumnSettings
   | SimpleFormulaColumnSettings
   | LinkColumnSettings
+  | HoursLogColumnSettings
   | Record<string, never>;
 
 // --- Column definition ---
@@ -291,6 +295,16 @@ export interface Column {
 
 export interface LocationValue {
   address: string;
+}
+
+/** One logged entry on an HOURS_LOG cell — a duration the out-source employee worked, plus
+ *  when it was logged (shown in the entry list, never editable after the fact). */
+export interface HoursLogEntry {
+  id: string;
+  /** Duration in minutes, always a multiple of 15 (the picker only offers :00/:15/:30/:45). */
+  minutes: number;
+  /** ISO timestamp of when this entry was added. */
+  loggedAt: string;
 }
 
 export interface TimeRangeValue {

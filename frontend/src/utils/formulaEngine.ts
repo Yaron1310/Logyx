@@ -13,7 +13,9 @@
  */
 
 import { ColumnType } from '../types';
+import type { HoursLogEntry } from '../types';
 import { formulaRefLog, sameColumnTrace } from './formulaDebug';
+import { sumHoursLogMinutes } from './hoursLog';
 
 export type ColumnValues = Record<string, number | null | undefined>;
 
@@ -475,7 +477,7 @@ class FormulaParser {
     sameColumnTrace('2. found the column', { columnId: col.id, type: col.type });
     // A reference to another formula cell resolves to its live computed value.
     if (col.type === ColumnType.SIMPLE_FORMULA) return this.resolveLocalFormula(ref, col);
-    if (col.type !== ColumnType.NUMBER) {
+    if (col.type !== ColumnType.NUMBER && col.type !== ColumnType.HOURS_LOG) {
       sameColumnTrace('3. HANDS TO LOADER — column is neither a number nor a formula', { type: col.type });
       return undefined;
     }
@@ -490,6 +492,11 @@ class FormulaParser {
     if (!item) return undefined;
 
     const val = item.values[col.id];
+    // An HOURS_LOG cell's numeric value is its running total, in decimal hours (e.g. 16:15 -> 16.25)
+    // — the natural unit for a formula like {ref} * hourlyRate.
+    if (col.type === ColumnType.HOURS_LOG) {
+      return sumHoursLogMinutes(Array.isArray(val) ? (val as HoursLogEntry[]) : []) / 60;
+    }
     return val != null && !isNaN(Number(val)) ? Number(val) : 0;
   }
 
