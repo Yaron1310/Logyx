@@ -22,7 +22,7 @@ import type { Column, NumberColumnSettings } from '../../types';
 import {
   FiType, FiHash, FiCalendar, FiFlag, FiUser, FiChevronDown,
   FiCheckSquare, FiTag, FiClock, FiMail, FiPhone, FiMapPin,
-  FiZap, FiLink, FiPlus, FiArrowUp, FiArrowDown, FiLoader, FiMenu, FiMoreVertical, FiTrash2, FiSettings, FiEdit2, FiRefreshCw, FiWatch,
+  FiZap, FiLink, FiPlus, FiArrowUp, FiArrowDown, FiLoader, FiMenu, FiMoreVertical, FiTrash2, FiSettings, FiEdit2, FiRefreshCw, FiWatch, FiPaperclip,
 } from 'react-icons/fi';
 import { calculateColumnWidth, COLUMN_TYPE_MIN_WIDTHS } from '../../utils/columnWidths';
 import { useColumnVisibilityTier, canSeeColumn } from '../../hooks/useColumnVisibility';
@@ -80,6 +80,7 @@ export const COLUMN_TYPE_ICONS: Record<ColumnType, React.ReactNode> = {
   ),
   [ColumnType.SIMPLE_FORMULA]: <FiZap size={13} aria-hidden="true" />,
   [ColumnType.HOURS_LOG]:      <FiWatch size={13} aria-hidden="true" />,
+  [ColumnType.FILES]:          <FiPaperclip size={13} aria-hidden="true" />,
 };
 
 const COLUMN_TYPE_LABELS: Record<ColumnType, string> = {
@@ -99,6 +100,7 @@ const COLUMN_TYPE_LABELS: Record<ColumnType, string> = {
   [ColumnType.TIME_RANGE]:     'Time Range',
   [ColumnType.SIMPLE_FORMULA]: 'Formula',
   [ColumnType.HOURS_LOG]:      'Hours Log',
+  [ColumnType.FILES]:          'Files',
 };
 
 // ---------------------------------------------------------------------------

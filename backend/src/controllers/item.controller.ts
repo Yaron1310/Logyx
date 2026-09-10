@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import * as logger from 'firebase-functions/logger';
 import admin from 'firebase-admin';
-import { db, querySnapshotToArray, snapshotToData } from '../services/firestore.service.js';
+import { db, storage, querySnapshotToArray, snapshotToData } from '../services/firestore.service.js';
 import { itemsCollection, columnsCollection, boardMembersCollection, notificationsCollection, usersCollection, boardsCollection, organizationsCollection } from '../db/collections.js';
 import { JwtUserPayload, DBItem, DBColumn, DBUser, DBBoard, DBBoardMember, ColumnType, NotificationType } from '../types/index.js';
 import { sanitizeText } from '../utils/sanitizer.js';
@@ -12,6 +12,7 @@ import {
   validateItemOwnershipChain,
 } from '../utils/workManagementAuth.js';
 import { validateColumnValue } from '../utils/columnValidator.js';
+import { ALLOWED_ATTACHMENT_MIME_TYPES } from '../utils/allowedFileTypes.js';
 import { parsePaginationParams, applyPagination, buildPaginatedResult } from '../utils/pagination.js';
 import { touchBoardVersion } from '../services/boardVersion.service.js';
 import { sendItemAssignmentEmail } from '../services/email.service.js';
@@ -755,5 +756,90 @@ export const deleteItem = async (req: Request, res: Response) => {
     if (isAuthError(err)) return res.status(err.status).json({ message: err.message });
     logger.error(`Error deleting item ${req.params.id}:`, err);
     res.status(500).json({ message: 'Failed to delete item.' });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// POST /items/:id/files
+//
+// Uploads one attachment for a FILES column. Same raw-binary + header
+// convention as the item chat's file upload (see itemChat.controller.ts):
+// the body is the file's bytes, Content-Type is its MIME type, X-Filename
+// carries the URL-encoded original filename, and X-Column-Id names which
+// FILES column this upload belongs to (there is no JSON body to carry it in).
+//
+// Returns the full attachment metadata (including uploader identity/time) —
+// the frontend appends it to the column's existing array and PATCHes the
+// item's values as usual, the same read-append-write flow already used for
+// HOURS_LOG entries.
+// ---------------------------------------------------------------------------
+const MAX_ITEM_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
+
+export const uploadItemFile = async (req: Request, res: Response) => {
+  const user = req.user as JwtUserPayload;
+  const id = req.params.id;
+  const columnId = req.headers['x-column-id'];
+  const mimeType = (req.headers['content-type'] || '').split(';')[0].trim();
+  const rawFilename = req.headers['x-filename'];
+  const filename = typeof rawFilename === 'string'
+    ? decodeURIComponent(rawFilename).trim()
+    : 'file';
+
+  if (typeof columnId !== 'string' || !columnId) {
+    return res.status(400).json({ message: 'X-Column-Id header is required.' });
+  }
+  if (!ALLOWED_ATTACHMENT_MIME_TYPES.has(mimeType)) {
+    return res.status(400).json({ message: `File type not allowed: ${mimeType}` });
+  }
+  if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+    return res.status(400).json({ message: 'No file data received.' });
+  }
+  if (req.body.length > MAX_ITEM_FILE_SIZE_BYTES) {
+    return res.status(400).json({ message: 'File exceeds the 20 MB limit.' });
+  }
+
+  try {
+    const doc = await itemsCollection(user.orgId).doc(id).get();
+    if (!doc.exists) return res.status(404).json({ message: 'Item not found.' });
+
+    const item = snapshotToData<DBItem>(doc)!;
+    const memberDoc = await boardMembersCollection(user.orgId, item.boardId).doc(user.id).get();
+    const memberData = memberDoc.exists ? memberDoc.data() as DBBoardMember : null;
+    assertItemAccess(user, item, 'update', memberData);
+
+    const colDoc = await columnsCollection(user.orgId, item.boardId).doc(columnId).get();
+    if (!colDoc.exists) return res.status(404).json({ message: 'Column not found.' });
+    const column = snapshotToData<DBColumn>(colDoc)!;
+    if (column.type !== ColumnType.FILES) {
+      return res.status(400).json({ message: `Column "${column.name}" is not a Files column.` });
+    }
+
+    const authorDoc = await usersCollection.doc(user.id).get();
+    const authorData = authorDoc.exists ? authorDoc.data() as DBUser : null;
+
+    const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_') || 'file';
+    const uniqueId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    const storagePath = `itemFiles/${user.orgId}/${id}/${columnId}/${uniqueId}_${safeName}`;
+    const storageFile = storage.bucket().file(storagePath);
+
+    await storageFile.save(req.body, {
+      metadata: { contentType: mimeType },
+      public: true,
+    });
+
+    res.status(201).json({
+      id: uniqueId,
+      url: storageFile.publicUrl(),
+      name: filename,
+      mimeType,
+      size: req.body.length,
+      uploadedBy: user.id,
+      uploadedByName: authorData?.name ?? user.id,
+      uploadedAt: new Date().toISOString(),
+    });
+  } catch (err: unknown) {
+    if (isAuthError(err)) return res.status(err.status).json({ message: err.message });
+    logger.error(`Error uploading file for item ${id}:`, err);
+    res.status(500).json({ message: 'Failed to upload file.' });
   }
 };

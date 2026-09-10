@@ -175,6 +175,7 @@ export enum ColumnType {
   TIME_RANGE = 'time_range',
   SIMPLE_FORMULA = 'simple_formula',
   HOURS_LOG = 'hours_log',
+  FILES = 'files',
 }
 
 // --- Column settings per type ---
@@ -241,6 +242,8 @@ export type LinkColumnSettings = Record<string, never>;
 
 export type HoursLogColumnSettings = Record<string, never>;
 
+export type FilesColumnSettings = Record<string, never>;
+
 export type ColumnSettings =
   | TextColumnSettings
   | NumberColumnSettings
@@ -252,6 +255,7 @@ export type ColumnSettings =
   | SimpleFormulaColumnSettings
   | LinkColumnSettings
   | HoursLogColumnSettings
+  | FilesColumnSettings
   | Record<string, never>;
 
 // --- Column definition ---
@@ -305,6 +309,19 @@ export interface HoursLogEntry {
   minutes: number;
   /** ISO timestamp of when this entry was added. */
   loggedAt: string;
+}
+
+/** One uploaded file on a FILES cell. */
+export interface FileAttachment {
+  id: string;
+  url: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  uploadedBy: string;
+  uploadedByName: string;
+  /** ISO timestamp of when this file was uploaded. */
+  uploadedAt: string;
 }
 
 export interface TimeRangeValue {

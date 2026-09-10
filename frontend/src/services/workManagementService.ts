@@ -1,4 +1,4 @@
-import type { Board, Group, Item, Column, ColumnType, ColumnSettings, ColumnVisibility, PaginatedResponse, DashboardParams, DashboardSummary, TimeRangeDependency, BoardMember, BoardRole, ChatMessage, Webhook, WebhookNameMode, CustomDashboard, CustomDashboardDataPoint, Form, FormField, FormAnswerValue, ItemFormEntry, FormResults } from '../types';
+import type { Board, Group, Item, Column, ColumnType, ColumnSettings, ColumnVisibility, PaginatedResponse, DashboardParams, DashboardSummary, TimeRangeDependency, BoardMember, BoardRole, ChatMessage, Webhook, WebhookNameMode, CustomDashboard, CustomDashboardDataPoint, Form, FormField, FormAnswerValue, ItemFormEntry, FormResults, FileAttachment } from '../types';
 import { fetchWithAuth } from './authFetch';
 
 // ─── BOARDS ──────────────────────────────────────────────────────────────────
@@ -201,6 +201,21 @@ export const updateItem = (id: string, patch: UpdateItemData): Promise<Item> =>
 
 export const reorderItems = (updates: ReorderItemUpdate[]): Promise<void> =>
   fetchWithAuth('/api/items/reorder', { method: 'PATCH', body: JSON.stringify({ updates }) });
+
+// Uploads one file for a FILES column. Same raw-binary + header convention as the item chat's
+// file upload (see uploadFileToBackend below) — X-Column-Id additionally tells the backend which
+// FILES column this belongs to. Returns the full attachment (including uploader identity/time);
+// the caller appends it to the column's current array and PATCHes the item as usual.
+export const uploadItemFile = (itemId: string, columnId: string, file: File): Promise<FileAttachment> =>
+  fetchWithAuth(`/api/items/${itemId}/files`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': file.type,
+      'X-Filename': encodeURIComponent(file.name),
+      'X-Column-Id': columnId,
+    },
+    body: file,
+  }) as Promise<FileAttachment>;
 
 export const archiveItem = (id: string): Promise<void> =>
   fetchWithAuth(`/api/items/${id}/archive`, { method: 'PATCH' });

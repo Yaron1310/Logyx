@@ -257,6 +257,7 @@ export enum ColumnType {
   TIME_RANGE = 'time_range',
   SIMPLE_FORMULA = 'simple_formula',
   HOURS_LOG = 'hours_log',
+  FILES = 'files',
 }
 
 // --- Column settings per type ---
@@ -531,6 +532,21 @@ export interface DBChatAttachment {
   name: string;
   mimeType: string;
   size: number;
+}
+
+// --- FILES column ---
+
+export interface DBFileAttachment {
+  id: string;
+  url: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  uploadedBy: string;
+  uploadedByName: string;
+  /** ISO timestamp string — stored as plain text (not a Firestore Timestamp) since this lives
+   *  nested inside an item.values array rather than as its own document field. */
+  uploadedAt: string;
 }
 
 // --- CUSTOM DASHBOARDS ---
