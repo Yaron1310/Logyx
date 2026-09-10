@@ -244,10 +244,6 @@ COLUMN_TYPE_GROUPS.forEach(({ label, types }) => {
   types.forEach((t) => { TYPE_TO_GROUP[t] = label; });
 });
 
-// HOURS_LOG has no Personal Hub cell implementation yet — hide it outside real board columns
-// rather than let it fall back to a plain text cell there.
-const BOARD_ONLY_TYPES = new Set<ColumnType>([ColumnType.HOURS_LOG]);
-
 const DEFAULT_COLUMN_TYPE = ColumnType.TEXT;
 
 const STATUS_PALETTE = [
@@ -637,9 +633,7 @@ const AddColumnModal: React.FC<AddColumnModalProps> = ({ boardId, onClose, inser
                 {BUTTON_DISPLAY_ORDER.map((groupLabel) => {
                   const groupData = COLUMN_TYPE_GROUPS.find(g => g.label === groupLabel);
                   if (!groupData) return null;
-                  const { label } = groupData;
-                  const types = mode === 'board' ? groupData.types : groupData.types.filter((t) => !BOARD_ONLY_TYPES.has(t));
-                  if (types.length === 0) return null;
+                  const { label, types } = groupData;
                   const s = GROUP_STYLES[label];
                   const isInformationGroup = label === 'Information';
 

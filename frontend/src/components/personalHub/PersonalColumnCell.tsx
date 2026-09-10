@@ -17,6 +17,7 @@ import PersonalLocationCell from './cells/PersonalLocationCell';
 import PersonalLinkCell from './cells/PersonalLinkCell';
 import PersonalTimeRangeCell from './cells/PersonalTimeRangeCell';
 import PersonalFormulaCell from './cells/PersonalFormulaCell';
+import PersonalHoursLogCell from './cells/PersonalHoursLogCell';
 
 interface Props {
   column: PersonalColumn;
@@ -65,6 +66,7 @@ const PersonalColumnCell: React.FC<Props> = ({ column, itemId, itemName, value, 
     case ColumnType.TIME_RANGE: return <PersonalTimeRangeCell {...props} />;
     case ColumnType.SIMPLE_FORMULA:
       return <PersonalFormulaCell {...props} gridContext={gridContext ?? { rowOrder: [itemId], columns: [], valuesByItem: {} }} />;
+    case ColumnType.HOURS_LOG: return <PersonalHoursLogCell {...props} gridContext={gridContext} />;
     default:
       return <PersonalTextCell {...props} />;
   }
