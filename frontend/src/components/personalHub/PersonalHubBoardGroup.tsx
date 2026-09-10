@@ -22,7 +22,7 @@ import { PERSONAL_COL_WIDTH } from './constants';
 import { ColumnType } from '../../types';
 import type { BoardView } from '../../contexts/BoardRenderContext';
 import type { PersonalGridContext } from './cells/types';
-import type { Item, PersonalColumn } from '../../types';
+import type { Group, Item, PersonalColumn } from '../../types';
 
 interface Props {
   boardId: string;
@@ -150,7 +150,8 @@ const PersonalHubBoardGroup: React.FC<Props> = ({ boardId, items, isOwn, ownerUs
     [allPersonalColumns, boardId],
   );
 
-  // Resolve each assigned item's group so subitems can be swapped out for their hosting item.
+  // Resolve each assigned item's group so subitems can be swapped out for their hosting item,
+  // and so displayed items can be sub-divided by their real source-board group (below).
   // Gated on the board having resolved — see the useColumns note above.
   const groupResults = useQueries({
     queries: items.map((item) => ({
@@ -162,9 +163,10 @@ const PersonalHubBoardGroup: React.FC<Props> = ({ boardId, items, isOwn, ownerUs
   });
   const groupsSettled = groupResults.every((r) => !r.isLoading);
 
-  const { topLevelItems, parentItemIds } = useMemo(() => {
+  const { topLevelItems, parentItemIds, topLevelItemGroupById } = useMemo(() => {
     const top: Item[] = [];
     const parentIds = new Set<string>();
+    const groupById = new Map<string, Group>();
     items.forEach((item, i) => {
       const group = groupResults[i]?.data;
       const groupErrored = groupResults[i]?.isError;
@@ -172,9 +174,10 @@ const PersonalHubBoardGroup: React.FC<Props> = ({ boardId, items, isOwn, ownerUs
         parentIds.add(group.parentItemId);
       } else {
         top.push(item);
+        if (group) groupById.set(item.id, group);
       }
     });
-    return { topLevelItems: top, parentItemIds: [...parentIds] };
+    return { topLevelItems: top, parentItemIds: [...parentIds], topLevelItemGroupById: groupById };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, groupResults.map((r) => r.data).join(','), groupResults.map((r) => r.isError).join(',')]);
 
@@ -187,14 +190,65 @@ const PersonalHubBoardGroup: React.FC<Props> = ({ boardId, items, isOwn, ownerUs
   });
   const parentItemsSettled = parentItemResults.every((r) => !r.isLoading);
 
-  const displayItems = useMemo(() => {
+  // A promoted subitem's parent is always itself a top-level item, but we only fetched the
+  // Item above — its Group (needed for grouping/sub-header display) is a further lookup.
+  const parentGroupResults = useQueries({
+    queries: parentItemResults.map((r) => ({
+      queryKey: queryKeys.groups.one(boardId, r.data?.groupId ?? ''),
+      queryFn: () => wm.getGroup(boardId, r.data!.groupId),
+      staleTime: 2 * 60 * 1000,
+      enabled: !!r.data?.groupId,
+    })),
+  });
+  const parentGroupsSettled = parentGroupResults.every((r, i) => !parentItemResults[i].data || !r.isLoading);
+
+  const itemGroupById = useMemo(() => {
+    const map = new Map(topLevelItemGroupById);
+    parentItemResults.forEach((r, i) => {
+      const parent = r.data;
+      const group = parentGroupResults[i]?.data;
+      if (parent && group) map.set(parent.id, group);
+    });
+    return map;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topLevelItemGroupById, parentItemResults.map((r) => r.data?.id).join(','), parentGroupResults.map((r) => r.data?.id).join(',')]);
+
+  // Sub-divide this board's items by their real source-board group — a group of one's own
+  // header only earns its keep once there's more than one to tell apart; a single-group board
+  // renders its items flat, same as before this feature existed. Ordered by the source group's
+  // own `order`, and each cluster's items by their own `order`, so this matches the row order
+  // on the real board; items whose group couldn't be resolved (rare — a deleted group) land in
+  // a trailing "Other" bucket rather than disappearing.
+  const { displayItems, groupedClusters } = useMemo(() => {
     const existingIds = new Set(topLevelItems.map((i) => i.id));
     const resolvedParents = parentItemResults
       .map((r) => r.data)
       .filter((p): p is Item => !!p && !existingIds.has(p.id));
-    return [...topLevelItems, ...resolvedParents];
+    const flat = [...topLevelItems, ...resolvedParents];
+
+    const byGroupId = new Map<string, { group: Group; items: Item[] }>();
+    const otherItems: Item[] = [];
+    for (const item of flat) {
+      const group = itemGroupById.get(item.id);
+      if (!group) { otherItems.push(item); continue; }
+      const entry = byGroupId.get(group.id) ?? { group, items: [] };
+      entry.items.push(item);
+      byGroupId.set(group.id, entry);
+    }
+    for (const entry of byGroupId.values()) entry.items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    const clusters: { group: Group | null; items: Item[] }[] = [...byGroupId.values()]
+      .sort((a, b) => (a.group.order ?? 0) - (b.group.order ?? 0));
+    if (otherItems.length > 0) clusters.push({ group: null, items: otherItems });
+
+    const totalGroups = clusters.length;
+    return {
+      displayItems: totalGroups > 1 ? clusters.flatMap((c) => c.items) : flat,
+      // Only worth a sub-header once there's more than one group to distinguish.
+      groupedClusters: totalGroups > 1 ? clusters : null,
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topLevelItems, parentItemResults.map((r) => r.data?.id).join(',')]);
+  }, [topLevelItems, parentItemResults.map((r) => r.data?.id).join(','), itemGroupById]);
 
   const itemIds = useMemo(() => items.map((i) => i.id), [items]);
   const displayItemIds = useMemo(() => displayItems.map((i) => i.id), [displayItems]);
@@ -229,10 +283,12 @@ const PersonalHubBoardGroup: React.FC<Props> = ({ boardId, items, isOwn, ownerUs
     return crossGroupGridContext.rowOrder.slice(0, start).map((id) => ({ id } as Item));
   }, [crossGroupGridContext, displayItemIds]);
 
+  const stillResolving = !groupsSettled || !parentItemsSettled || !parentGroupsSettled;
+
   React.useEffect(() => {
-    if (groupsSettled && parentItemsSettled) onRowsResolved?.(boardId, displayItemIds, personalValuesByItem);
+    if (!stillResolving) onRowsResolved?.(boardId, displayItemIds, personalValuesByItem);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boardId, displayItemIds.join(','), personalValuesByItem, groupsSettled, parentItemsSettled, onRowsResolved]);
+  }, [boardId, displayItemIds.join(','), personalValuesByItem, stillResolving, onRowsResolved]);
 
   const itemSectionWidth = 298 - 16;
 
@@ -247,8 +303,6 @@ const PersonalHubBoardGroup: React.FC<Props> = ({ boardId, items, isOwn, ownerUs
       </div>
     );
   }
-
-  const stillResolving = !groupsSettled || !parentItemsSettled;
 
   return (
     <div
@@ -324,7 +378,40 @@ const PersonalHubBoardGroup: React.FC<Props> = ({ boardId, items, isOwn, ownerUs
                 <div className="px-4 py-4 text-xs text-gray-400 italic">No assigned items on this board.</div>
               ) : (
                 <SortableContext items={displayItemIds} strategy={verticalListSortingStrategy}>
-                  {displayItems.map((item) => (
+                  {groupedClusters ? groupedClusters.map(({ group, items: clusterItems }) => (
+                    <div key={group?.id ?? '__other__'}>
+                      {/* Sub-division within this board group — the source-board group each
+                          item actually belongs to. Only rendered once there's more than one
+                          to tell apart (see groupedClusters above); a single-group board
+                          stays exactly as it looked before this existed. */}
+                      <div
+                        className="sticky left-4 w-fit flex items-center gap-1.5 pt-2 pb-1 pl-1"
+                        aria-label={`Sub-group: ${group?.name ?? 'Other'}, ${clusterItems.length} items`}
+                      >
+                        <span
+                          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                          aria-hidden="true"
+                          style={{ backgroundColor: group?.color || '#9ca3af' }}
+                        />
+                        <h3 className="text-xs font-semibold truncate max-w-[220px]" style={{ color: group?.color || '#6b7280' }}>
+                          {group?.name ?? 'Other'}
+                        </h3>
+                        <span className="text-[11px] text-gray-400" aria-hidden="true">{clusterItems.length}</span>
+                      </div>
+                      {clusterItems.map((item) => (
+                        <ItemRow
+                          key={item.id}
+                          item={item}
+                          onOpenDetail={onOpenDetail}
+                          groupColor={group?.color || '#6366f1'}
+                          leadingExtraCells={renderPersonalCells(crossGroupColumns, item, personalValuesByItem, isOwn, crossGroupGridContext, ownerUserId)}
+                          extraCells={renderPersonalCells(boardOnlyColumns, item, personalValuesByItem, isOwn, boardOnlyGridContext, ownerUserId)}
+                          subitemAssigneeFilterId={subitemAssigneeFilterId}
+                          groupMinWidth={groupMinWidth}
+                        />
+                      ))}
+                    </div>
+                  )) : displayItems.map((item) => (
                     <ItemRow
                       key={item.id}
                       item={item}
