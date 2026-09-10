@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import ReactDOM from 'react-dom';
 import { BOARD_TOTAL_GROUP_ID, HUB_ROWS_GROUP_ID, evaluateFormula, extractForeignRefs, formulaRefDomKey, serializeRef, type SummaryCalc, type CellRef } from '../../utils/formulaEngine';
 import { ColumnType } from '../../types';
-import type { Column, Item, SimpleFormulaColumnSettings, TimeRangeValue } from '../../types';
+import type { Column, HoursLogEntry, Item, SimpleFormulaColumnSettings, TimeRangeValue } from '../../types';
+import { sumHoursLogMinutes } from '../../utils/hoursLog';
 import { calculateColumnWidth } from '../../utils/columnWidths';
 import { formatGroupedNumber } from '../../utils/numberFormat';
 import { useUpdateColumn } from '../../hooks/queries/useColumnQueries';
@@ -75,6 +76,7 @@ const AGGREGATABLE_TYPES = new Set([
   ColumnType.TIME_RANGE,
   ColumnType.CHECKBOX,
   ColumnType.SIMPLE_FORMULA,
+  ColumnType.HOURS_LOG,
 ]);
 
 // Column types that only support count (non-empty values)
@@ -355,7 +357,7 @@ export const SummaryCell: React.FC<SummaryCellProps> = ({
 }) => {
   const getVal = getValue ?? ((i: Item, colId: string) => i.values[colId]);
   const isCheckbox = col.type === ColumnType.CHECKBOX;
-  const isTimeType = col.type === ColumnType.TIME || col.type === ColumnType.TIME_RANGE;
+  const isTimeType = col.type === ColumnType.TIME || col.type === ColumnType.TIME_RANGE || col.type === ColumnType.HOURS_LOG;
   const isCountOnly = COUNT_ONLY_TYPES.has(col.type);
   const defaultCalc: CalcMode = isCheckbox ? 'count' : isCountOnly ? 'none' : 'sum';
 
@@ -525,6 +527,17 @@ export const SummaryCell: React.FC<SummaryCellProps> = ({
       return computeTimeRangeIntervals().map(({ s, e }) =>
         Math.max(1, Math.round((e.getTime() - s.getTime()) / 86_400_000) + 1),
       );
+    }
+    if (col.type === ColumnType.HOURS_LOG) {
+      // Rows with no logged entries are excluded, same as an empty TIME cell — a real 0-hour
+      // entry isn't possible (the picker requires a positive duration), so an empty array only
+      // ever means "nothing logged yet", not "logged zero".
+      return effectiveItems
+        .map((i) => {
+          const entries = getVal(i, col.id) as HoursLogEntry[] | null | undefined;
+          return entries && entries.length > 0 ? sumHoursLogMinutes(entries) : null;
+        })
+        .filter((m): m is number => m !== null);
     }
     return [];
   }

@@ -106,8 +106,8 @@ function mergedDays(intervals: { s: number; e: number }[]): number {
 
 /**
  * Numeric group-summary matching GroupSummaryRow's aggregation, for any column type:
- * count works for every type; NUMBER/TIME/TIME_RANGE produce numeric aggregates. Returns null
- * for combinations with no numeric meaning (e.g. avg of a text column).
+ * count works for every type; NUMBER/TIME/TIME_RANGE/HOURS_LOG produce numeric aggregates.
+ * Returns null for combinations with no numeric meaning (e.g. avg of a text column).
  *
  * SIMPLE_FORMULA columns hold formula text, not values, so they can only be aggregated when the
  * caller supplies `evalRow` — a per-row evaluator producing that cell's live computed value (null
@@ -155,6 +155,19 @@ export function computeSummaryNumeric(
     if (calc === 'sum') return iv.length ? mergedDays(iv) : null;
     const days = iv.map(({ s, e }) => Math.max(1, Math.round((e - s) / 86_400_000) + 1));
     return aggregateSummary(days, calc);
+  }
+  if (type === ColumnType.HOURS_LOG) {
+    // Per-row totals in decimal hours — same unit as a direct single-cell HOURS_LOG reference
+    // (see resolveLocalById), so {ref} * hourlyRate behaves the same whether it names one cell
+    // or a group total.
+    const vals = rows
+      .map((r) => {
+        const entries = getVal(r, columnId);
+        if (!Array.isArray(entries) || entries.length === 0) return null;
+        return sumHoursLogMinutes(entries as HoursLogEntry[]) / 60;
+      })
+      .filter((n): n is number => n !== null);
+    return aggregateSummary(vals, calc);
   }
   return null;
 }
