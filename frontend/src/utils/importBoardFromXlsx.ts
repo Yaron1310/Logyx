@@ -10,13 +10,17 @@ export interface ImportResult {
   boardName: string;
   groupCount: number;
   itemCount: number;
+  subitemCount?: number;
+  warnings?: string[];
 }
 
 // ── Raw cell value helpers ────────────────────────────────────────────────────
+// (a subset of these is also used by importBoardFromMondayXlsx.ts, which parses
+// a differently-structured export from Monday.com rather than this app's own.)
 
-type RawCell = ExcelJS.CellValue | null | undefined;
+export type RawCell = ExcelJS.CellValue | null | undefined;
 
-function cellToText(val: RawCell): string {
+export function cellToText(val: RawCell): string {
   if (val == null) return '';
   if (val instanceof Date) return val.toLocaleDateString();
   if (typeof val === 'object') {
@@ -33,7 +37,7 @@ function cellToText(val: RawCell): string {
 }
 
 // Returns an ISO date string (YYYY-MM-DD) for date cells, empty string otherwise.
-function cellToDateIso(val: RawCell): string {
+export function cellToDateIso(val: RawCell): string {
   if (val == null) return '';
   if (val instanceof Date) return val.toISOString().split('T')[0];
   const text = cellToText(val).trim();
@@ -51,7 +55,7 @@ function cellToDateIso(val: RawCell): string {
   return text; // keep as-is if unparseable
 }
 
-function parseRows(sheet: ExcelJS.Worksheet): RawCell[][] {
+export function parseRows(sheet: ExcelJS.Worksheet): RawCell[][] {
   const rows: RawCell[][] = [];
   sheet.eachRow({ includeEmpty: true }, (row) => {
     const vals = (row.values as RawCell[]) || [];
@@ -160,13 +164,13 @@ const START_SUFFIX = ' - Start';
 const END_SUFFIX = ' - End';
 const PERSON_HEADERS = new Set(['person', 'people', 'user']);
 
-function isUrlLike(text: string): boolean {
+export function isUrlLike(text: string): boolean {
   return /^https?:\/\//i.test(text) || /^www\./i.test(text);
 }
 
 // Matches plain numbers, optionally negative, with an optional decimal part
 // and optional thousands separators (e.g. "1,234.5", "-42", "3.14").
-function isNumberLike(text: string): boolean {
+export function isNumberLike(text: string): boolean {
   return /^-?\d{1,3}(,\d{3})*(\.\d+)?$/.test(text) || /^-?\d+(\.\d+)?$/.test(text);
 }
 
@@ -194,13 +198,13 @@ function buildColumnSpecs(headers: string[]): ColumnSpec[] {
 }
 
 // Builds a stable option id from a label string.
-function labelToOptionId(label: string): string {
+export function labelToOptionId(label: string): string {
   const slug = label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
   return slug || `opt_${Math.random().toString(36).slice(2, 7)}`;
 }
 
 // Fetches all users for a workspace and returns a case-insensitive name → id map.
-async function buildUserNameMap(workspaceId: string): Promise<Map<string, string>> {
+export async function buildUserNameMap(workspaceId: string): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   let cursor: string | null = null;
   do {
@@ -215,6 +219,18 @@ async function buildUserNameMap(workspaceId: string): Promise<Map<string, string
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
+// Detects a Monday.com board export: its header row always starts with the
+// literal columns "Name", "Subitems" (a rollup/mirror column this app's own
+// export never produces). Scanned across the first few rows since row 1 is
+// the board name and row 2 the first group name, not the header itself.
+function isMondayFormat(rows: RawCell[][]): boolean {
+  for (let r = 0; r < Math.min(rows.length, 6); r++) {
+    const row = rows[r] ?? [];
+    if (cellToText(row[0]).trim() === 'Name' && cellToText(row[1]).trim() === 'Subitems') return true;
+  }
+  return false;
+}
+
 export async function importBoardFromXlsx(
   file: File,
   workspaceId: string,
@@ -228,6 +244,11 @@ export async function importBoardFromXlsx(
   if (!sheet) throw new Error('No worksheet found in file.');
 
   const rows = parseRows(sheet);
+
+  if (isMondayFormat(rows)) {
+    const { importMondayRows } = await import('./importBoardFromMondayXlsx');
+    return importMondayRows(rows, workspaceId, userNameMap);
+  }
 
   // Row 1: board name
   const boardName = cellToText(rows[0]?.[0]).trim() || 'Imported Board';
