@@ -12,7 +12,7 @@ import {
   validateItemOwnershipChain,
 } from '../utils/workManagementAuth.js';
 import { validateColumnValue } from '../utils/columnValidator.js';
-import { ALLOWED_ATTACHMENT_MIME_TYPES } from '../utils/allowedFileTypes.js';
+import { ALLOWED_ATTACHMENT_MIME_TYPES, buildContentDisposition } from '../utils/allowedFileTypes.js';
 import { parsePaginationParams, applyPagination, buildPaginatedResult } from '../utils/pagination.js';
 import { touchBoardVersion } from '../services/boardVersion.service.js';
 import { sendItemAssignmentEmail } from '../services/email.service.js';
@@ -823,7 +823,7 @@ export const uploadItemFile = async (req: Request, res: Response) => {
     const storageFile = storage.bucket().file(storagePath);
 
     await storageFile.save(req.body, {
-      metadata: { contentType: mimeType },
+      metadata: { contentType: mimeType, contentDisposition: buildContentDisposition(filename) },
       public: true,
     });
 

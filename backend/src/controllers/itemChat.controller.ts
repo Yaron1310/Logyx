@@ -6,7 +6,7 @@ import { itemsCollection, itemChatMessagesCollection, boardMembersCollection, us
 import { JwtUserPayload, DBItem, DBUser, DBBoardMember, DBChatMessage, DBChatAttachment, DBColumn, ColumnType } from '../types/index.js';
 import { assertItemAccess } from '../utils/workManagementAuth.js';
 import { sendChatMentionEmail } from '../services/email.service.js';
-import { ALLOWED_ATTACHMENT_MIME_TYPES } from '../utils/allowedFileTypes.js';
+import { ALLOWED_ATTACHMENT_MIME_TYPES, buildContentDisposition } from '../utils/allowedFileTypes.js';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -86,7 +86,7 @@ export const uploadChatFile = async (req: Request, res: Response) => {
     const storageFile = storage.bucket().file(storagePath);
 
     await storageFile.save(req.body, {
-      metadata: { contentType: mimeType },
+      metadata: { contentType: mimeType, contentDisposition: buildContentDisposition(filename) },
       public: true,
     });
 

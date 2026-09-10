@@ -107,9 +107,9 @@ const FileIcon: React.FC<FileIconProps> = ({ file, canDelete, onRemove }) => {
       <button
         ref={ref}
         type="button"
-        className="w-[22px] h-[22px] flex-shrink-0 rounded overflow-hidden border border-gray-200 bg-white flex items-center justify-center hover:ring-2 hover:ring-indigo-300 transition-shadow"
+        className="w-[22px] h-[22px] flex-shrink-0 rounded overflow-hidden border border-gray-200 bg-white flex items-center justify-center hover:ring-2 hover:ring-indigo-300 transition-shadow outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
         style={{ width: ICON_SIZE, height: ICON_SIZE }}
-        onClick={(e) => { e.stopPropagation(); window.open(file.url, '_blank', 'noopener,noreferrer'); }}
+        onClick={(e) => { e.stopPropagation(); e.currentTarget.blur(); window.open(file.url, '_blank', 'noopener,noreferrer'); }}
         onMouseEnter={() => { cancelClose(); setHovered(true); }}
         onMouseLeave={scheduleClose}
         aria-label={`Open ${file.name} (${fileKindLabel(file.mimeType)}, ${formatFileSize(file.size)}, uploaded by ${file.uploadedByName})`}
@@ -162,6 +162,11 @@ const FilesCellInner: React.FC<Props> = ({ item, column }) => {
   const openPicker = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isBoardReadOnly || isUploading) return;
+    // The OS file picker steals window focus while it's open; when it closes, focus lands back
+    // on whichever element triggered it. Left alone, that leaves the button showing the
+    // browser's native focus ring indefinitely (it doesn't count as a normal blur/click for the
+    // browser's focus-visible heuristic). Blur it immediately so nothing lingers.
+    (e.currentTarget as HTMLElement).blur();
     inputRef.current?.click();
   };
 
@@ -221,7 +226,7 @@ const FilesCellInner: React.FC<Props> = ({ item, column }) => {
               type="button"
               onClick={openPicker}
               disabled={isUploading}
-              className="w-[22px] h-[22px] flex-shrink-0 rounded border border-dashed border-gray-300 flex items-center justify-center text-gray-400 hover:border-indigo-400 hover:text-indigo-500 transition-colors disabled:opacity-50"
+              className="w-[22px] h-[22px] flex-shrink-0 rounded border border-dashed border-gray-300 flex items-center justify-center text-gray-400 hover:border-indigo-400 hover:text-indigo-500 transition-colors disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
               aria-label="Add another file"
               title="Add another file"
             >
