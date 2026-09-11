@@ -101,6 +101,11 @@ export const listGroups = (boardId: string, includeArchived = false, parentItemI
   return fetchWithAuth(`/api/boards/${boardId}/groups${qs}`);
 };
 
+/** Every subitem group on the board, regardless of which item owns it — used to backfill a
+ *  HOURS_LOG column marked "Subitems only" into subitem groups that already existed. */
+export const listAllSubitemGroups = (boardId: string): Promise<Group[]> =>
+  fetchWithAuth(`/api/boards/${boardId}/groups?allSubitems=true`);
+
 export const getGroup = (boardId: string, groupId: string): Promise<Group> =>
   fetchWithAuth(`/api/boards/${boardId}/groups/${groupId}`);
 
@@ -281,6 +286,11 @@ export const listColumns = (boardId: string, parentGroupId?: string): Promise<Co
   const qs = parentGroupId ? `?parentGroupId=${encodeURIComponent(parentGroupId)}` : '';
   return fetchWithAuth(`/api/boards/${boardId}/columns${qs}`);
 };
+
+/** Every subitem-scoped column on the board, regardless of which group owns it — used to find
+ *  which subitem groups are still missing a HOURS_LOG "Subitems only" mirror column. */
+export const listAllSubitemColumns = (boardId: string): Promise<Column[]> =>
+  fetchWithAuth(`/api/boards/${boardId}/columns?allSubitems=true`);
 
 export const getColumn = (boardId: string, id: string): Promise<Column> =>
   fetchWithAuth(`/api/boards/${boardId}/columns/${id}`);

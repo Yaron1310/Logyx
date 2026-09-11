@@ -20,9 +20,11 @@ import { CSS } from '@dnd-kit/utilities';
 import { useUpdateColumn } from '../../hooks/queries/useColumnQueries';
 import { useUpdatePersonalColumn } from '../../hooks/queries/usePersonalHubQueries';
 import { useAuthSession } from '../../hooks/useAuthSession';
+import * as wm from '../../services/workManagementService';
 import { ColumnType, UserRole } from '../../types';
 import type {
   Column,
+  Item,
   PersonalColumn,
   StatusOption,
   DropdownOption,
@@ -134,7 +136,7 @@ const EditColumnConfigModal: React.FC<EditColumnConfigModalProps> = ({ boardId, 
 
   const { mutateAsync: updateBoardColumn, isPending: isPendingBoard } = useUpdateColumn(boardId ?? '');
   const { mutateAsync: updatePersonalColumn, isPending: isPendingPersonal } = useUpdatePersonalColumn(personalOwnerId);
-  const isPending = isPersonal ? isPendingPersonal : isPendingBoard;
+  const isPendingSave = isPersonal ? isPendingPersonal : isPendingBoard;
   const [error, setError] = useState('');
   const { user } = useAuthSession();
   const isOrgAdmin =
@@ -148,6 +150,12 @@ const EditColumnConfigModal: React.FC<EditColumnConfigModalProps> = ({ boardId, 
   const hoursLogSettings = column.settings as HoursLogColumnSettings;
   const showSubitemsOnly = !isPersonal && !isSubitemColumn && isOrgAdmin && column.type === ColumnType.HOURS_LOG;
   const [subitemsOnly, setSubitemsOnly] = useState(hoursLogSettings.subitemsOnly ?? false);
+  const turningOnSubitemsOnly = showSubitemsOnly && subitemsOnly && !hoursLogSettings.subitemsOnly;
+  const [isBackfilling, setIsBackfilling] = useState(false);
+  // Set once items-with-subitems already holding their own logged hours are found while turning
+  // "Subitems only" on — holds the save until the admin picks what to do with them (see below).
+  const [legacyConfirm, setLegacyConfirm] = useState<{ items: Item[] } | null>(null);
+  const isPending = isPendingSave || isBackfilling;
   const [visibility, setVisibility] = useState<ColumnVisibility>(
     (column as Column).visibility ?? DEFAULT_COLUMN_VISIBILITY,
   );
@@ -267,14 +275,59 @@ const EditColumnConfigModal: React.FC<EditColumnConfigModalProps> = ({ boardId, 
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (column.type === ColumnType.STATUS && statusOptions.length === 0) {
-      setError('Status column requires at least one option.');
-      return;
-    }
+  /** Saves the column, backfilling the "Subitems only" mirror column into every existing
+   *  subitem group when that box was just checked. `legacyAction` is only meaningful on that
+   *  path: unset the first time through (to discover items-with-subitems that already hold
+   *  their own logged hours and pause for the admin's choice via legacyConfirm), then 'keep'
+   *  (do nothing — their old entries simply add into the parent's now-merged total) or 'clear'
+   *  (wipe those entries first) once the admin has answered. */
+  const performSave = async (legacyAction?: 'keep' | 'clear') => {
     setError('');
+    setIsBackfilling(true);
     try {
+      if (!isPersonal && turningOnSubitemsOnly && boardId) {
+        const groups = await wm.listAllSubitemGroups(boardId);
+
+        if (!legacyAction && !legacyConfirm) {
+          const parentItemIds = [...new Set(groups.map((g) => g.parentItemId).filter((id): id is string => !!id))];
+          const parentItems = await Promise.all(parentItemIds.map((id) => wm.getItem(id)));
+          const affected = parentItems.filter((it) => {
+            const v = it.values[column.id];
+            return Array.isArray(v) && v.length > 0;
+          });
+          if (affected.length > 0) {
+            setLegacyConfirm({ items: affected });
+            setIsBackfilling(false);
+            return;
+          }
+        }
+
+        if (legacyAction === 'clear' && legacyConfirm) {
+          await Promise.all(
+            legacyConfirm.items.map((item) => wm.updateItem(item.id, { values: { [column.id]: [] } })),
+          );
+        }
+
+        const existingSubitemColumns = await wm.listAllSubitemColumns(boardId);
+        const mirroredGroupIds = new Set(
+          existingSubitemColumns
+            .filter((c) => c.type === ColumnType.HOURS_LOG && (c.settings as HoursLogColumnSettings).mirroredFromColumnId === column.id)
+            .map((c) => c.parentGroupId),
+        );
+        await Promise.all(
+          groups
+            .filter((g) => !mirroredGroupIds.has(g.id))
+            .map((g) =>
+              wm.createColumn(boardId, {
+                name: column.name,
+                type: ColumnType.HOURS_LOG,
+                settings: { mirroredFromColumnId: column.id },
+                parentGroupId: g.id,
+              }),
+            ),
+        );
+      }
+
       if (isPersonal) {
         await updatePersonalColumn({ id: column.id, patch: { settings: buildSettings() } });
       } else {
@@ -283,10 +336,22 @@ const EditColumnConfigModal: React.FC<EditColumnConfigModalProps> = ({ boardId, 
           patch: { settings: buildSettings(), ...(showVisibility ? { visibility } : {}) },
         });
       }
+      setLegacyConfirm(null);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save configuration.');
+    } finally {
+      setIsBackfilling(false);
     }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (column.type === ColumnType.STATUS && statusOptions.length === 0) {
+      setError('Status column requires at least one option.');
+      return;
+    }
+    void performSave();
   };
 
   const TITLES: Partial<Record<ColumnType, string>> = {
@@ -596,7 +661,7 @@ const EditColumnConfigModal: React.FC<EditColumnConfigModalProps> = ({ boardId, 
                 <p className="text-xs text-gray-500">
                   When an item has subitems, this column is auto-added to them and the item's own
                   cell shows only their total — hours can no longer be logged on the item directly.
-                  New subitems pick this up automatically; existing ones don't get it retroactively.
+                  Saving adds it to every existing subitem group too, not just new ones.
                 </p>
               </div>
             )}
@@ -626,6 +691,63 @@ const EditColumnConfigModal: React.FC<EditColumnConfigModalProps> = ({ boardId, 
           </div>
         </form>
       </div>
+
+      {legacyConfirm && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="legacy-hours-title"
+        >
+          <div className="bg-white rounded-xl shadow-xl w-full p-5 space-y-3" style={{ maxWidth: '26rem' }}>
+            <h2 id="legacy-hours-title" className="text-sm font-semibold text-gray-800">
+              {legacyConfirm.items.length} item{legacyConfirm.items.length !== 1 ? 's' : ''} already {legacyConfirm.items.length !== 1 ? 'have' : 'has'} logged hours
+            </h2>
+            <p className="text-xs text-gray-500">
+              {legacyConfirm.items.length !== 1 ? 'These items' : 'This item'} already {legacyConfirm.items.length !== 1 ? 'have' : 'has'} subitems and hours
+              logged directly on {legacyConfirm.items.length !== 1 ? 'them' : 'it'}. What should happen to those entries? Either way, logging directly on
+              the item will be blocked going forward.
+            </p>
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={() => void performSave('keep')}
+                disabled={isPending}
+                className="w-full text-left px-3 py-2 text-sm border border-gray-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50 transition-colors disabled:opacity-60"
+                aria-label="Keep existing logged hours and merge them into the subitems total"
+              >
+                <span className="font-medium text-gray-800">Keep and merge</span>
+                <span className="block text-xs text-gray-500 mt-0.5">
+                  Existing entries stay and add into the item's total alongside its subitems.
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void performSave('clear')}
+                disabled={isPending}
+                className="w-full text-left px-3 py-2 text-sm border border-gray-200 rounded-lg hover:border-red-300 hover:bg-red-50 transition-colors disabled:opacity-60"
+                aria-label="Clear existing logged hours"
+              >
+                <span className="font-medium text-gray-800">Clear them</span>
+                <span className="block text-xs text-gray-500 mt-0.5">
+                  Removes those entries — only the subitems' hours will count from now on.
+                </span>
+              </button>
+            </div>
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => setLegacyConfirm(null)}
+                disabled={isPending}
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors disabled:opacity-60"
+                aria-label="Cancel"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>,
     modalRoot,
   );

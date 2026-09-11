@@ -237,7 +237,10 @@ const HoursLogCellInner: React.FC<Props> = ({ item, column }) => {
     ? subitems.reduce((sum, si) => sum + sumHoursLogMinutes(si.values[mirroredColumn.id] as HoursLogEntry[] | undefined), 0)
     : 0;
 
-  const totalMinutes = hasSubitems ? subitemsTotalMinutes : sumHoursLogMinutes(rawValue);
+  // Additive, not a replacement: any hours already logged directly on the item before
+  // "Subitems only" was turned on (kept rather than cleared at that point) simply keep
+  // counting alongside the subitems' total — the item itself just can't gain any more.
+  const totalMinutes = hasSubitems ? sumHoursLogMinutes(rawValue) + subitemsTotalMinutes : sumHoursLogMinutes(rawValue);
 
   const commitEntries = (next: HoursLogEntry[], label: string) => {
     pushUndo({ label, undo: () => mutate({ id: item.id, patch: { values: { [column.id]: rawValue } } }) });

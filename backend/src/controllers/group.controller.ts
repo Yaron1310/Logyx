@@ -33,7 +33,7 @@ function chunk<T>(arr: T[], size = 30): T[][] {
 export const getGroups = async (req: Request, res: Response) => {
   const user = req.user as JwtUserPayload;
   const { boardId } = req.params;
-  const { includeArchived, parentItemId } = req.query;
+  const { includeArchived, parentItemId, allSubitems } = req.query;
 
   try {
     const boardDoc = await boardsCollection(user.orgId).doc(boardId).get();
@@ -47,7 +47,11 @@ export const getGroups = async (req: Request, res: Response) => {
 
     let groups = allGroups;
 
-    if (parentItemId && typeof parentItemId === 'string') {
+    if (allSubitems === 'true') {
+      // Every subitem group on the board, regardless of which item owns it — used to backfill
+      // a HOURS_LOG column marked "Subitems only" into subitem groups that already existed.
+      groups = allGroups.filter((g) => !!g.parentItemId);
+    } else if (parentItemId && typeof parentItemId === 'string') {
       // Return only subitem groups for the given parent item
       groups = allGroups.filter((g) => g.parentItemId === parentItemId);
     } else {

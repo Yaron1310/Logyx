@@ -75,7 +75,7 @@ async function validateBoardOwnership(orgId: string, boardId: string): Promise<b
 export const getColumns = async (req: Request, res: Response) => {
   const user = req.user as JwtUserPayload;
   const { boardId } = req.params;
-  const { parentGroupId } = req.query;
+  const { parentGroupId, allSubitems } = req.query;
 
   try {
     if (!await validateBoardOwnership(user.orgId, boardId)) {
@@ -87,7 +87,11 @@ export const getColumns = async (req: Request, res: Response) => {
       canAccessColumn(user, asDBColumn(col), 'read'),
     );
 
-    if (parentGroupId && typeof parentGroupId === 'string') {
+    if (allSubitems === 'true') {
+      // Every subitem-scoped column on the board, regardless of which group owns it — used to
+      // find which subitem groups are still missing a HOURS_LOG "Subitems only" mirror column.
+      columns = columns.filter((col) => !!(col as DBColumn).parentGroupId);
+    } else if (parentGroupId && typeof parentGroupId === 'string') {
       // Return only subitem columns for the given group
       columns = columns.filter((col) => (col as DBColumn).parentGroupId === parentGroupId);
     } else {
