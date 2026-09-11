@@ -352,7 +352,8 @@ const SubitemRow: React.FC<{
           )}
           {unreadCount === 0 && readMessages && (
             <span
-              className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-gray-300 rounded-full"
+              className="absolute -top-0.5 rounded-full"
+              style={{ backgroundColor: '#bfc2c6', width: '0.6rem', height: '0.6rem', right: 0, left: 0 }}
               aria-label="This item has messages, all read"
             />
           )}
