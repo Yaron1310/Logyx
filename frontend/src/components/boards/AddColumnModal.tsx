@@ -357,6 +357,9 @@ const AddColumnModal: React.FC<AddColumnModalProps> = ({ boardId, onClose, inser
   // TAGS
   const [allowCustom, setAllowCustom] = useState(true);
 
+  // HOURS_LOG (template mode only — see the "Subitems only" section below)
+  const [subitemsOnly, setSubitemsOnly] = useState(false);
+
   // VISIBILITY (board columns only)
   const [visibility, setVisibility] = useState<ColumnVisibility>(DEFAULT_COLUMN_VISIBILITY);
 
@@ -409,6 +412,8 @@ const AddColumnModal: React.FC<AddColumnModalProps> = ({ boardId, onClose, inser
           ...(formulaUnit ? { unit: formulaUnit } : {}),
           ...(formulaUnit === '%' ? { percentAutoMultiply: formulaPercentMultiply } : {}),
         };
+      case ColumnType.HOURS_LOG:
+        return { ...(isTemplate && subitemsOnly ? { subitemsOnly: true } : {}) };
       default:
         return {};
     }
@@ -1001,6 +1006,28 @@ const AddColumnModal: React.FC<AddColumnModalProps> = ({ boardId, onClose, inser
                   />
                   Allow custom tags
                 </label>
+              </div>
+            )}
+
+            {/* HOURS_LOG settings — org-admin-only, template mode only (this modal is only
+                reachable there via the admin-only Personal Hub Template page) */}
+            {type === ColumnType.HOURS_LOG && isTemplate && (
+              <div className="space-y-1 pt-1 border-t border-gray-100">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Hours Log Settings</p>
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={subitemsOnly}
+                    onChange={(e) => setSubitemsOnly(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    aria-label="Subitems only"
+                  />
+                  Subitems only
+                </label>
+                <p className="text-xs text-gray-500">
+                  When a user has subitems assigned to them under an item, this column is shown on
+                  those subitems too, and the item's own cell shows only their total.
+                </p>
               </div>
             )}
 

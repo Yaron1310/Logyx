@@ -102,6 +102,7 @@ const renderPersonalCells = (
             editable={isOwn}
             gridContext={gridContext}
             userId={ownerUserId}
+            itemBoardId={item.boardId}
           />
         </div>
       ))}
@@ -416,6 +417,7 @@ const PersonalHubBoardGroup: React.FC<Props> = ({ boardId, items, isOwn, ownerUs
                           leadingExtraCells={renderPersonalCells(crossGroupColumns, item, personalValuesByItem, isOwn, crossGroupGridContext, ownerUserId)}
                           extraCells={renderPersonalCells(boardOnlyColumns, item, personalValuesByItem, isOwn, boardOnlyGridContext, ownerUserId)}
                           subitemAssigneeFilterId={subitemAssigneeFilterId}
+                          personalEditable={isOwn}
                           groupMinWidth={groupMinWidth}
                         />
                       ))}
@@ -429,6 +431,7 @@ const PersonalHubBoardGroup: React.FC<Props> = ({ boardId, items, isOwn, ownerUs
                       leadingExtraCells={renderPersonalCells(crossGroupColumns, item, personalValuesByItem, isOwn, crossGroupGridContext, ownerUserId)}
                       extraCells={renderPersonalCells(boardOnlyColumns, item, personalValuesByItem, isOwn, boardOnlyGridContext, ownerUserId)}
                       subitemAssigneeFilterId={subitemAssigneeFilterId}
+                      personalEditable={isOwn}
                       groupMinWidth={groupMinWidth}
                     />
                   ))}

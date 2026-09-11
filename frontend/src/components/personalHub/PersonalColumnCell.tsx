@@ -29,6 +29,8 @@ interface Props {
   gridContext?: PersonalGridContext;
   /** Whose hub this cell belongs to — undefined for your own; set when an admin is editing another user's Personal Hub. */
   userId?: string;
+  /** The board this row's underlying item actually belongs to — see PersonalCellProps. */
+  itemBoardId?: string;
 }
 
 /**
@@ -46,8 +48,8 @@ interface Props {
  * group's list of cross-group or board-only personal columns) — any cell,
  * any row, not just the same row as the formula.
  */
-const PersonalColumnCell: React.FC<Props> = ({ column, itemId, itemName, value, editable, gridContext, userId }) => {
-  const props = { column, itemId, itemName: itemName ?? '', value, editable, userId };
+const PersonalColumnCell: React.FC<Props> = ({ column, itemId, itemName, value, editable, gridContext, userId, itemBoardId }) => {
+  const props = { column, itemId, itemName: itemName ?? '', value, editable, userId, itemBoardId };
 
   switch (column.type) {
     case ColumnType.TEXT: return <PersonalTextCell {...props} />;

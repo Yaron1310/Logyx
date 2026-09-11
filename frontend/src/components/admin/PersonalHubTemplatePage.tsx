@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiPlus, FiTrash2, FiLoader, FiAlertCircle, FiArrowUp, FiArrowDown, FiUser, FiHash } from 'react-icons/fi';
+import { FiArrowLeft, FiPlus, FiTrash2, FiLoader, FiAlertCircle, FiArrowUp, FiArrowDown, FiUser, FiHash, FiSettings } from 'react-icons/fi';
 import * as apiService from '../../services/geminiService';
 import AddColumnModal, { COLUMN_TYPE_LABELS } from '../boards/AddColumnModal';
 import { useFormulaRecording } from '../../contexts/FormulaRecordingContext';
 import TemplateTotalScopeModal from '../formula/TemplateTotalScopeModal';
 import { formulaRefDomKey } from '../../utils/formulaEngine';
 import { ColumnType } from '../../types';
-import type { PersonalHubTemplateColumn } from '../../types';
+import type { HoursLogColumnSettings, PersonalHubTemplateColumn } from '../../types';
 
 /** Org-admin editor for the Personal Hub default template: an "all groups" column-schema
  *  list only — no groups, items, or data. Materialized into a user's own Personal Hub
@@ -24,6 +24,7 @@ const PersonalHubTemplatePage: React.FC = () => {
   const [persistError, setPersistError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [filterModalCol, setFilterModalCol] = useState<PersonalHubTemplateColumn | null>(null);
+  const [settingsModalCol, setSettingsModalCol] = useState<PersonalHubTemplateColumn | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,6 +77,12 @@ const PersonalHubTemplatePage: React.FC = () => {
     const next = [...columns];
     [next[index], next[target]] = [next[target], next[index]];
     void commit(next.map((c, i) => ({ ...c, order: i })));
+  };
+
+  const toggleSubitemsOnly = (col: PersonalHubTemplateColumn, value: boolean) => {
+    const settings: HoursLogColumnSettings = { ...(col.settings as HoursLogColumnSettings), subitemsOnly: value };
+    void commit(columns.map((c) => (c.id === col.id ? { ...c, settings } : c)));
+    setSettingsModalCol(null);
   };
 
   const chooseFilterScope = (scope: 'item' | 'global') => {
@@ -198,6 +205,17 @@ const PersonalHubTemplatePage: React.FC = () => {
                         Insert total
                       </button>
                     )}
+                    {col.type === ColumnType.HOURS_LOG && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setSettingsModalCol(col); }}
+                        disabled={isPersisting}
+                        className="text-gray-400 hover:text-gray-700 transition-colors p-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
+                        aria-label={`Settings for ${col.name}`}
+                      >
+                        <FiSettings size={15} aria-hidden="true" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); handleRemove(col.id); }}
@@ -238,6 +256,50 @@ const PersonalHubTemplatePage: React.FC = () => {
           onChoose={chooseFilterScope}
           onCancel={() => setFilterModalCol(null)}
         />
+      )}
+
+      {settingsModalCol && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="hours-log-settings-title"
+          onClick={() => setSettingsModalCol(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl w-full p-5 space-y-3"
+            style={{ maxWidth: '24rem' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="hours-log-settings-title" className="text-sm font-semibold text-gray-800">
+              {settingsModalCol.name} · Hours Log Settings
+            </h2>
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={(settingsModalCol.settings as HoursLogColumnSettings).subitemsOnly ?? false}
+                onChange={(e) => toggleSubitemsOnly(settingsModalCol, e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                aria-label="Subitems only"
+              />
+              Subitems only
+            </label>
+            <p className="text-xs text-gray-500">
+              When a user has subitems assigned to them under an item, this column is shown on
+              those subitems too, and the item's own cell shows only their total.
+            </p>
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => setSettingsModalCol(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors"
+                aria-label="Close"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

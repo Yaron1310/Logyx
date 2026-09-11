@@ -18,6 +18,9 @@ import { ColumnCell } from './cells';
 import { getUnreadCount, hasReadMessages } from './ItemChatModal';
 import { calculateColumnWidth } from '../../utils/columnWidths';
 import FlippedMenu from '../common/FlippedMenu';
+import { usePersonalItemValues } from '../../hooks/queries/usePersonalHubQueries';
+import PersonalColumnCell from '../personalHub/PersonalColumnCell';
+import type { PersonalColumn } from '../../types';
 
 const CONFIGURABLE_TYPES = [ColumnType.TEXT, ColumnType.NUMBER, ColumnType.STATUS, ColumnType.DROPDOWN, ColumnType.SIMPLE_FORMULA];
 
@@ -35,6 +38,15 @@ interface SubitemGroupProps {
   onEmpty?: () => void;
   /** Personal Hub only: when set, only render subitems this user is assigned to. */
   filterAssigneeId?: string;
+  /** Personal Hub only: HOURS_LOG personal columns marked "Subitems only", overlaid onto
+   *  subitem rows this user (personalOwnerId) is assigned to — attached in the Personal Hub
+   *  view only, not part of the board's own subitem columns. */
+  personalOverlayColumns?: PersonalColumn[];
+  /** Whose personal columns/values personalOverlayColumns belongs to — undefined for your own. */
+  personalOwnerId?: string;
+  /** Whether the viewer owns personalOwnerId's hub (vs. an admin viewing someone else's) —
+   *  gates whether the overlaid personal subitem cells are editable. */
+  personalEditable?: boolean;
   /** Gates "Add subitem" — also true for workspace-level "edit" users. */
   canManageItems: boolean;
   /** Gates "Add subitem column" and the per-column manage menu — structural, board-editor-only
@@ -226,7 +238,15 @@ const SubitemColumnHeader: React.FC<{
   );
 };
 
-const SubitemRow: React.FC<{ item: Item; columns: Column[]; canManageItems: boolean }> = ({ item, columns, canManageItems }) => {
+const SubitemRow: React.FC<{
+  item: Item;
+  columns: Column[];
+  canManageItems: boolean;
+  personalOverlayColumns?: PersonalColumn[];
+  personalOwnerId?: string;
+  personalEditable?: boolean;
+  personalValues?: Record<string, unknown>;
+}> = ({ item, columns, canManageItems, personalOverlayColumns = [], personalOwnerId, personalEditable, personalValues }) => {
   const { user, isPublicView } = useAuthSession();
   const { openChat, openForms } = useBoardRender();
   const { mutateAsync: archiveItem } = useArchiveItem();
@@ -357,13 +377,35 @@ const SubitemRow: React.FC<{ item: Item; columns: Column[]; canManageItems: bool
       {columns.map((col) => (
         <ColumnCell key={col.id} item={item} column={col} />
       ))}
+      {/* Personal Hub only — columns attached here for the viewer, not part of the board */}
+      {personalOverlayColumns.map((col) => {
+        const colWidth = calculateColumnWidth(col.name, col.type);
+        return (
+          <div
+            key={col.id}
+            role="gridcell"
+            style={{ width: `${colWidth}px`, minWidth: `${colWidth}px` }}
+            className="flex flex-shrink-0 items-center justify-center border-r border-[#e5e7eb] bg-indigo-50/30"
+          >
+            <PersonalColumnCell
+              column={col}
+              itemId={item.id}
+              itemName={item.name}
+              value={personalValues?.[col.id]}
+              editable={!!personalEditable}
+              userId={personalOwnerId}
+              itemBoardId={item.boardId}
+            />
+          </div>
+        );
+      })}
       {/* Sentinel: prevents CSS last:border-r-0 from hiding the last cell's right border */}
       <div className="w-0 flex-shrink-0" aria-hidden="true" />
     </div>
   );
 };
 
-const SubitemGroup: React.FC<SubitemGroupProps> = ({ boardId, workspaceId, parentItemId, groupColor, onEmpty, filterAssigneeId, canManageItems, canManageColumns }) => {
+const SubitemGroup: React.FC<SubitemGroupProps> = ({ boardId, workspaceId, parentItemId, groupColor, onEmpty, filterAssigneeId, personalOverlayColumns = [], personalOwnerId, personalEditable, canManageItems, canManageColumns }) => {
   const { user } = useAuthSession();
   const { columnWidths } = useBoardRender();
   const qc = useQueryClient();
@@ -416,6 +458,14 @@ const SubitemGroup: React.FC<SubitemGroupProps> = ({ boardId, workspaceId, paren
   const displayedItems = filterAssigneeId
     ? realItems.filter((item) => (item.assignees ?? []).includes(filterAssigneeId))
     : realItems;
+
+  // Personal Hub only — bulk-fetch the viewer's personal values for the overlaid subitem
+  // columns, once for the whole panel (same store the overlay cells write back to).
+  const { data: personalValuesByItem = {} } = usePersonalItemValues(
+    displayedItems.map((i) => i.id),
+    personalOwnerId,
+    personalOverlayColumns.length > 0 && displayedItems.length > 0,
+  );
 
   // Set once teardown starts and never reset — prevents the auto-init effect below
   // from racing a just-emptied group back into existence in the brief window
@@ -620,6 +670,23 @@ const SubitemGroup: React.FC<SubitemGroupProps> = ({ boardId, workspaceId, paren
               );
             })}
 
+        {/* Personal Hub only — columns attached here for the viewer, not part of the board */}
+        {personalOverlayColumns.map((col) => {
+          const colWidth = calculateColumnWidth(col.name, col.type);
+          return (
+            <div
+              key={col.id}
+              role="columnheader"
+              style={{ width: `${colWidth}px`, minWidth: `${colWidth}px` }}
+              className="flex flex-shrink-0 items-center justify-center gap-1 px-2 py-1.5 border-r border-[#e5e7eb] bg-indigo-50/50 text-xs font-semibold text-indigo-600"
+              title={`${col.name} (your personal column)`}
+            >
+              <span className="text-indigo-400 flex-shrink-0">{COLUMN_TYPE_ICONS[col.type]}</span>
+              <span className="truncate">{col.name}</span>
+            </div>
+          );
+        })}
+
         {pendingColumnPlaceholders.map((col) => {
           const colWidth = calculateColumnWidth(col.name, col.type);
           return (
@@ -718,7 +785,16 @@ const SubitemGroup: React.FC<SubitemGroupProps> = ({ boardId, workspaceId, paren
         ) : (
           <>
             {displayedItems.map((item) => (
-              <SubitemRow key={item.id} item={item} columns={columns} canManageItems={canManageItems} />
+              <SubitemRow
+                key={item.id}
+                item={item}
+                columns={columns}
+                canManageItems={canManageItems}
+                personalOverlayColumns={personalOverlayColumns}
+                personalOwnerId={personalOwnerId}
+                personalEditable={personalEditable}
+                personalValues={personalValuesByItem[item.id]}
+              />
             ))}
             {pendingItems.map((p) => (
               <div key={p.tempId} role="row" className="flex items-center gap-2 border-b border-[#e5e7eb] px-3 py-1.5 opacity-60">

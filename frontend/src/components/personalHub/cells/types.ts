@@ -8,6 +8,10 @@ export interface PersonalCellProps {
   editable: boolean;
   /** Whose hub this cell belongs to — undefined for your own; set when an admin is editing another user's Personal Hub. */
   userId?: string;
+  /** The board this row's underlying item actually belongs to (distinct from gridContext.boardId,
+   *  which addresses the whole table and may be empty/different for cross-group columns). Only
+   *  used by HOURS_LOG's "Subitems only" rollup, to look up the item's real subitem group. */
+  itemBoardId?: string;
 }
 
 /**
