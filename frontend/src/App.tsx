@@ -21,11 +21,21 @@ import UserApprovalPage from './components/auth/UserApprovalPage';
 import LandingPage from './components/public/LandingPage';
 import LegalPage from './components/legal/LegalPage';
 import AccessibilityPage from './components/legal/AccessibilityPage';
-import DemoBoardPage from './components/demo/DemoBoardPage';
-import PublicBoardViewPage from './components/boards/PublicBoardViewPage';
 
-// -- Lazy imports only for the authenticated area (code-split by user role) --
+// -- Lazy imports for the authenticated area (code-split by user role) --
 const MainLayout = React.lazy(() => import('./components/layout/MainLayout'));
+
+// DemoBoardPage and PublicBoardViewPage both statically import BoardViewPage — the single
+// heaviest page in the app (the whole board grid: every cell type, GanttView, the dependency
+// overlay, dnd-kit, formulaEngine, ...). Keeping these two eager (like the other public/auth
+// pages above) pulled all of that into the main entry bundle for every visitor, since Rollup
+// can't split a module into its own chunk while some route still reaches it via a static
+// import chain — even though the normal `/boards/:id` route below already lazy-loads
+// BoardViewPage on its own. Lazy-loading these two lets Rollup finally split BoardViewPage
+// out into a real shared async chunk, at the cost of a brief spinner on these two
+// (comparatively rare) routes instead of on every page load.
+const DemoBoardPage = React.lazy(() => import('./components/demo/DemoBoardPage'));
+const PublicBoardViewPage = React.lazy(() => import('./components/boards/PublicBoardViewPage'));
 
 // -- User chunk --
 const ProfilePage = React.lazy(() => import('./components/profile/ProfilePage'));
@@ -209,8 +219,8 @@ const App: React.FC = () => {
         <Route path="/approve-user" element={<UserApprovalPage />} />
         <Route path="/legal" element={<LegalPage />} />
         <Route path="/accessibility" element={<AccessibilityPage />} />
-        <Route path="/demo-board/*" element={<DemoBoardPage />} />
-        <Route path="/public/board-view/:token/*" element={<PublicBoardViewPage />} />
+        <Route path="/demo-board/*" element={<Suspense fallback={<PageLoader />}><DemoBoardPage /></Suspense>} />
+        <Route path="/public/board-view/:token/*" element={<Suspense fallback={<PageLoader />}><PublicBoardViewPage /></Suspense>} />
 
         {/* Authenticated routes */}
         <Route element={<Suspense fallback={<PageLoader />}><MainLayout /></Suspense>}>
