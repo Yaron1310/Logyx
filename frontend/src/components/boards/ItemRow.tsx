@@ -154,6 +154,7 @@ const ItemRowInner: React.FC<ItemRowProps> = ({ item, onOpenDetail, groupColor, 
     pushUndo({
       label: `Deleted item "${itemName}"`,
       undo: () => { void restoreItem(itemId); },
+      persist: { type: 'restoreItem', itemId },
     });
   };
 

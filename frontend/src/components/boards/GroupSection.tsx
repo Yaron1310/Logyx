@@ -3,7 +3,7 @@ import {
   FiChevronDown, FiChevronRight, FiMoreHorizontal, FiPlus,
   FiEdit2, FiTrash2, FiLoader, FiMenu, FiArchive, FiLink,
   FiChevronsLeft, FiChevronLeft, FiChevronRight as FiChevronRightNav,
-  FiCheckSquare, FiSquare, FiCopy,
+  FiCheckSquare, FiSquare, FiCopy, FiUserPlus,
 } from 'react-icons/fi';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -12,13 +12,16 @@ import { useUpdateGroup, useArchiveGroup, useRestoreGroup, useDuplicateGroup } f
 import { useUndo } from '../../contexts/UndoContext';
 import { useAuthSession } from '../../hooks/useAuthSession';
 import { useColumns } from '../../hooks/queries/useColumnQueries';
+import { useUsersQuery } from '../../hooks/queries/useUserQueries';
 import { ColumnType } from '../../types';
 import type { Group, Item, StatusColumnSettings } from '../../types';
 import type { DuplicateGroupMode } from '../../services/workManagementService';
 import ItemRow from './ItemRow';
 import GroupSummaryRow from './GroupSummaryRow';
 import GroupWebhookModal from './GroupWebhookModal';
+import AssignUsersModal from './AssignUsersModal';
 import ColorPickerPopover from './ColorPickerPopover';
+import GroupAssignedUserBadge from './GroupAssignedUserBadge';
 import { COLUMN_TYPE_ICONS, ITEM_COL_ID } from './ColumnHeader';
 import { calculateColumnWidth, DRAG_HANDLE_WIDTH } from '../../utils/columnWidths';
 import { useBoardRender } from '../../contexts/BoardRenderContext';
@@ -90,6 +93,17 @@ const GroupSection: React.FC<GroupSectionProps> = ({
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [webhookModalOpen, setWebhookModalOpen] = useState(false);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [showAssignUsersModal, setShowAssignUsersModal] = useState(false);
+
+  const personColumns = columns.filter((c) => c.type === ColumnType.PERSON);
+  const assignedByColumn = group.assignedByColumn ?? {};
+  // Union of every column's bulk-assigned list, deduped — a user assigned via any Person column
+  // shows one avatar, regardless of how many columns they're recorded under.
+  const assignedUserIds = [...new Set(Object.values(assignedByColumn).flat())];
+  // Only fetched once a group actually has a bulk assignment to show — most groups won't.
+  const { data: usersForAssignedBadge = [] } = useUsersQuery({ limit: 200 }, assignedUserIds.length > 0);
+  const assignedUsers = usersForAssignedBadge.filter((u) => assignedUserIds.includes(u.id));
+  const personColumnsForUser = (userId: string) => personColumns.filter((c) => assignedByColumn[c.id]?.includes(userId));
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0);
@@ -298,6 +312,7 @@ const GroupSection: React.FC<GroupSectionProps> = ({
     pushUndo({
       label: `Deleted group "${groupName}"`,
       undo: () => { void restoreGroup({ boardId, groupId }); },
+      persist: { type: 'restoreGroup', boardId, groupId },
     });
   };
 
@@ -345,7 +360,12 @@ const GroupSection: React.FC<GroupSectionProps> = ({
     <div
       ref={setGroupRef}
       style={groupStyle}
-      className="flex flex-col pt-8"
+      // w-max: without an explicit width, this block's own box stays only as wide as the
+      // scroll viewport (its content — the wider table section below — overflows it rather
+      // than growing it). The sticky title's stick range is bounded by its containing block
+      // (this div), so past that narrower width it ran out of room to stick and started
+      // scrolling away. Sizing this div to its actual (wider) content fixes that.
+      className="flex flex-col pt-8 w-max"
       aria-label={`Group: ${group.name}`}
     >
       {/* Group title — sticky, floats above the table grid */}
@@ -521,6 +541,19 @@ const GroupSection: React.FC<GroupSectionProps> = ({
                   Duplicate
                 </button>
 
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { setMenuOpen(false); setShowAssignUsersModal(true); }}
+                  disabled={personColumns.length === 0}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Assign users to every item in this group"
+                  title={personColumns.length === 0 ? 'Add a Person column to this board first' : undefined}
+                >
+                  <FiUserPlus size={13} aria-hidden="true" />
+                  Assign users
+                </button>
+
                 {knownTotal >= MANUAL_PAGINATION_MIN_ROWS && (
                   <button
                     type="button"
@@ -623,7 +656,46 @@ const GroupSection: React.FC<GroupSectionProps> = ({
             )}
           </div>
         )}
+
+        {/* Group-level bulk assignment badge — set via "Assign users" above; a record of that
+            action, not a live rollup of each item's current Person value. Hover an avatar to
+            remove that person (from whichever column(s) they're recorded under). */}
+        {assignedUsers.length > 0 && (
+          <div
+            className="flex items-center -space-x-1.5 flex-shrink-0"
+            aria-label={`Group assigned to ${assignedUsers.map((u) => u.name).join(', ')}`}
+          >
+            {assignedUsers.slice(0, 4).map((u) => (
+              <GroupAssignedUserBadge
+                key={u.id}
+                user={u}
+                boardId={boardId}
+                groupId={group.id}
+                columnsForUser={personColumnsForUser(u.id)}
+              />
+            ))}
+            {assignedUsers.length > 4 && (
+              <div
+                className="h-6 w-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] text-gray-600 border-2 border-gray-300 flex-shrink-0"
+                title={assignedUsers.slice(4).map((u) => u.name).join(', ')}
+              >
+                +{assignedUsers.length - 4}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {showAssignUsersModal && (
+        <AssignUsersModal
+          boardId={boardId}
+          groupId={group.id}
+          groupName={group.name}
+          personColumns={personColumns}
+          assignedByColumn={assignedByColumn}
+          onClose={() => setShowAssignUsersModal(false)}
+        />
+      )}
 
       {/* Board table */}
       <section

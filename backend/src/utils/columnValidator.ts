@@ -172,6 +172,47 @@ export function validateColumnValue(column: DBColumn, value: unknown): Validatio
       return { valid: true };
     }
 
+    case ColumnType.FILES: {
+      if (!Array.isArray(value)) {
+        return { valid: false, error: `Column "${column.name}": value must be an array of file attachments.` };
+      }
+      for (const entry of value) {
+        const e = entry as Record<string, unknown>;
+        if (
+          typeof e !== 'object' || e === null ||
+          typeof e.id !== 'string' ||
+          typeof e.url !== 'string' ||
+          typeof e.name !== 'string' ||
+          typeof e.mimeType !== 'string' ||
+          typeof e.size !== 'number' || isNaN(e.size) || e.size < 0 ||
+          typeof e.uploadedBy !== 'string' ||
+          typeof e.uploadedByName !== 'string' ||
+          typeof e.uploadedAt !== 'string' || isNaN(Date.parse(e.uploadedAt))
+        ) {
+          return { valid: false, error: `Column "${column.name}": each entry must have id, url, name, mimeType (strings), size (non-negative number), uploadedBy, uploadedByName (strings), and uploadedAt (ISO date string).` };
+        }
+      }
+      return { valid: true };
+    }
+
+    case ColumnType.HOURS_LOG: {
+      if (!Array.isArray(value)) {
+        return { valid: false, error: `Column "${column.name}": value must be an array of logged-hours entries.` };
+      }
+      for (const entry of value) {
+        const e = entry as Record<string, unknown>;
+        if (
+          typeof e !== 'object' || e === null ||
+          typeof e.id !== 'string' ||
+          typeof e.minutes !== 'number' || isNaN(e.minutes) || e.minutes <= 0 ||
+          typeof e.loggedAt !== 'string' || isNaN(Date.parse(e.loggedAt))
+        ) {
+          return { valid: false, error: `Column "${column.name}": each entry must have id (string), minutes (positive number), and loggedAt (ISO date string).` };
+        }
+      }
+      return { valid: true };
+    }
+
     default:
       return { valid: false, error: `Unknown column type.` };
   }

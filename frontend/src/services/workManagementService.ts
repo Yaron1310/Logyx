@@ -1,4 +1,4 @@
-import type { Board, Group, Item, Column, ColumnType, ColumnSettings, ColumnVisibility, PaginatedResponse, DashboardParams, DashboardSummary, TimeRangeDependency, BoardMember, BoardRole, ChatMessage, Webhook, WebhookNameMode, CustomDashboard, CustomDashboardDataPoint, Form, FormField, FormAnswerValue, ItemFormEntry, FormResults } from '../types';
+import type { Board, Group, Item, Column, ColumnType, ColumnSettings, ColumnVisibility, PaginatedResponse, DashboardParams, DashboardSummary, TimeRangeDependency, BoardMember, BoardRole, ChatMessage, Webhook, WebhookNameMode, CustomDashboard, CustomDashboardDataPoint, Form, FormField, FormAnswerValue, ItemFormEntry, FormResults, FileAttachment } from '../types';
 import { fetchWithAuth } from './authFetch';
 
 // ─── BOARDS ──────────────────────────────────────────────────────────────────
@@ -130,6 +130,32 @@ export const duplicateGroup = (boardId: string, groupId: string, mode: Duplicate
 export const reorderGroups = (boardId: string, order: ReorderGroupItem[]): Promise<void> =>
   fetchWithAuth(`/api/boards/${boardId}/groups/reorder`, { method: 'PATCH', body: JSON.stringify({ order }) });
 
+// Bulk-sets a PERSON column to the same users on every item (and their subitems) in the group at
+// once — the group context menu's "Assign users" action — instead of doing it item by item.
+export const assignGroupUsers = (
+  boardId: string,
+  groupId: string,
+  columnId: string,
+  userIds: string[],
+): Promise<{ group: Group; itemCount: number }> =>
+  fetchWithAuth(`/api/boards/${boardId}/groups/${groupId}/assign-users`, {
+    method: 'POST',
+    body: JSON.stringify({ columnId, userIds }),
+  });
+
+// Removes one user from one or more of the group's bulk-assigned Person columns, across every
+// item and subitem in the group — the inverse of assignGroupUsers.
+export const unassignGroupUser = (
+  boardId: string,
+  groupId: string,
+  userId: string,
+  columnIds: string[],
+): Promise<{ group: Group }> =>
+  fetchWithAuth(`/api/boards/${boardId}/groups/${groupId}/unassign-user`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, columnIds }),
+  });
+
 // ─── ITEMS ────────────────────────────────────────────────────────────────────
 
 export interface CreateItemData {
@@ -201,6 +227,21 @@ export const updateItem = (id: string, patch: UpdateItemData): Promise<Item> =>
 
 export const reorderItems = (updates: ReorderItemUpdate[]): Promise<void> =>
   fetchWithAuth('/api/items/reorder', { method: 'PATCH', body: JSON.stringify({ updates }) });
+
+// Uploads one file for a FILES column. Same raw-binary + header convention as the item chat's
+// file upload (see uploadFileToBackend below) — X-Column-Id additionally tells the backend which
+// FILES column this belongs to. Returns the full attachment (including uploader identity/time);
+// the caller appends it to the column's current array and PATCHes the item as usual.
+export const uploadItemFile = (itemId: string, columnId: string, file: File): Promise<FileAttachment> =>
+  fetchWithAuth(`/api/items/${itemId}/files`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': file.type,
+      'X-Filename': encodeURIComponent(file.name),
+      'X-Column-Id': columnId,
+    },
+    body: file,
+  }) as Promise<FileAttachment>;
 
 export const archiveItem = (id: string): Promise<void> =>
   fetchWithAuth(`/api/items/${id}/archive`, { method: 'PATCH' });

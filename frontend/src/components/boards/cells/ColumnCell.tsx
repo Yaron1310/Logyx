@@ -16,6 +16,8 @@ import LocationCell from './LocationCell';
 import TimeRangeCell from './TimeRangeCell';
 import SimpleFormulaCell from './SimpleFormulaCell';
 import LinkCell from './LinkCell';
+import HoursLogCell from './HoursLogCell';
+import FilesCell from './FilesCell';
 
 interface ColumnCellProps {
   item: Item;
@@ -40,6 +42,8 @@ const ColumnCellInner: React.FC<ColumnCellProps> = ({ item, column, groupColor }
     case ColumnType.TIME_RANGE:    return <TimeRangeCell item={item} column={column} groupColor={groupColor} />;
     case ColumnType.SIMPLE_FORMULA: return <SimpleFormulaCell item={item} column={column} />;
     case ColumnType.LINK:          return <LinkCell item={item} column={column} />;
+    case ColumnType.HOURS_LOG:     return <HoursLogCell item={item} column={column} />;
+    case ColumnType.FILES:         return <FilesCell item={item} column={column} />;
     default:                       return <TextCell item={item} column={column} />;
   }
 };

@@ -4,7 +4,7 @@ import {
   FiX, FiColumns, FiPlus, FiTrash2,
   FiType, FiHash, FiCalendar, FiClock,
   FiFlag, FiUser, FiChevronDown, FiCheckSquare, FiTag,
-  FiMail, FiPhone, FiMapPin, FiZap, FiLink, FiShield,
+  FiMail, FiPhone, FiMapPin, FiZap, FiLink, FiShield, FiWatch, FiPaperclip,
 } from 'react-icons/fi';
 import { useCreateColumn, useColumns, useSubitemColumns, useReorderColumns, useDeleteColumn } from '../../hooks/queries/useColumnQueries';
 import { useCreatePersonalColumn, usePersonalColumns, useReorderPersonalColumns, useDeletePersonalColumn, useUpdatePersonalItemValue } from '../../hooks/queries/usePersonalHubQueries';
@@ -107,6 +107,8 @@ export const COLUMN_TYPE_LABELS: Record<ColumnType, string> = {
   [ColumnType.LINK]: 'Link',
   [ColumnType.TIME_RANGE]: 'Time Range',
   [ColumnType.SIMPLE_FORMULA]: 'Formula',
+  [ColumnType.HOURS_LOG]: 'Hours Log',
+  [ColumnType.FILES]: 'Files',
 };
 
 const COLUMN_TYPE_ICONS: Record<ColumnType, React.ReactNode> = {
@@ -137,6 +139,8 @@ const COLUMN_TYPE_ICONS: Record<ColumnType, React.ReactNode> = {
   [ColumnType.LOCATION]: <FiMapPin size={16} aria-hidden="true" />,
   [ColumnType.LINK]: <FiLink size={16} aria-hidden="true" />,
   [ColumnType.SIMPLE_FORMULA]: <FiZap size={16} aria-hidden="true" />,
+  [ColumnType.HOURS_LOG]: <FiWatch size={16} aria-hidden="true" />,
+  [ColumnType.FILES]: <FiPaperclip size={16} aria-hidden="true" />,
 };
 
 type GroupStyle = {
@@ -229,9 +233,9 @@ const GROUP_STYLES: Record<string, GroupStyle> = {
 
 const COLUMN_TYPE_GROUPS: { label: string; types: ColumnType[] }[] = [
   { label: 'Inputs', types: [ColumnType.TEXT, ColumnType.NUMBER] },
-  { label: 'Time', types: [ColumnType.DATE, ColumnType.TIME, ColumnType.TIME_RANGE] },
+  { label: 'Time', types: [ColumnType.DATE, ColumnType.TIME, ColumnType.TIME_RANGE, ColumnType.HOURS_LOG] },
   { label: 'Selection', types: [ColumnType.STATUS, ColumnType.DROPDOWN, ColumnType.CHECKBOX, ColumnType.TAGS] },
-  { label: 'Information', types: [ColumnType.EMAIL, ColumnType.PHONE, ColumnType.PERSON, ColumnType.LOCATION, ColumnType.LINK] },
+  { label: 'Information', types: [ColumnType.EMAIL, ColumnType.PHONE, ColumnType.PERSON, ColumnType.LOCATION, ColumnType.LINK, ColumnType.FILES] },
   { label: 'Calculation', types: [ColumnType.SIMPLE_FORMULA] },
 ];
 
@@ -241,6 +245,10 @@ const TYPE_TO_GROUP: Record<ColumnType, string> = {} as Record<ColumnType, strin
 COLUMN_TYPE_GROUPS.forEach(({ label, types }) => {
   types.forEach((t) => { TYPE_TO_GROUP[t] = label; });
 });
+
+// FILES has no Personal Hub cell implementation yet — hide it outside real board columns
+// rather than let it fall back to a plain text cell there.
+const BOARD_ONLY_TYPES = new Set<ColumnType>([ColumnType.FILES]);
 
 const DEFAULT_COLUMN_TYPE = ColumnType.TEXT;
 
@@ -631,7 +639,9 @@ const AddColumnModal: React.FC<AddColumnModalProps> = ({ boardId, onClose, inser
                 {BUTTON_DISPLAY_ORDER.map((groupLabel) => {
                   const groupData = COLUMN_TYPE_GROUPS.find(g => g.label === groupLabel);
                   if (!groupData) return null;
-                  const { label, types } = groupData;
+                  const { label } = groupData;
+                  const types = mode === 'board' ? groupData.types : groupData.types.filter((t) => !BOARD_ONLY_TYPES.has(t));
+                  if (types.length === 0) return null;
                   const s = GROUP_STYLES[label];
                   const isInformationGroup = label === 'Information';
 

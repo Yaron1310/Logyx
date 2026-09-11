@@ -174,6 +174,8 @@ export enum ColumnType {
   LINK = 'link',
   TIME_RANGE = 'time_range',
   SIMPLE_FORMULA = 'simple_formula',
+  HOURS_LOG = 'hours_log',
+  FILES = 'files',
 }
 
 // --- Column settings per type ---
@@ -238,6 +240,10 @@ export interface SimpleFormulaColumnSettings {
 
 export type LinkColumnSettings = Record<string, never>;
 
+export type HoursLogColumnSettings = Record<string, never>;
+
+export type FilesColumnSettings = Record<string, never>;
+
 export type ColumnSettings =
   | TextColumnSettings
   | NumberColumnSettings
@@ -248,6 +254,8 @@ export type ColumnSettings =
   | TagsColumnSettings
   | SimpleFormulaColumnSettings
   | LinkColumnSettings
+  | HoursLogColumnSettings
+  | FilesColumnSettings
   | Record<string, never>;
 
 // --- Column definition ---
@@ -291,6 +299,29 @@ export interface Column {
 
 export interface LocationValue {
   address: string;
+}
+
+/** One logged entry on an HOURS_LOG cell — a duration the out-source employee worked, plus
+ *  when it was logged (shown in the entry list, never editable after the fact). */
+export interface HoursLogEntry {
+  id: string;
+  /** Duration in minutes, always a multiple of 15 (the picker only offers :00/:15/:30/:45). */
+  minutes: number;
+  /** ISO timestamp of when this entry was added. */
+  loggedAt: string;
+}
+
+/** One uploaded file on a FILES cell. */
+export interface FileAttachment {
+  id: string;
+  url: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  uploadedBy: string;
+  uploadedByName: string;
+  /** ISO timestamp of when this file was uploaded. */
+  uploadedAt: string;
 }
 
 export interface TimeRangeValue {
@@ -362,6 +393,12 @@ export interface Group {
   parentItemId?: string;
   /** Per-column cumulative summary scope (columnId -> include groups above), independent per group. */
   summaryCumulative?: Record<string, boolean>;
+  /** Record of bulk "Assign users" actions on this group, keyed by PERSON column id — a record
+   *  of those actions for the group title row to display (union of every column's list), not a
+   *  live rollup of what each item currently holds (an item can be edited individually
+   *  afterward without this changing). A column's key is removed once its list empties out via
+   *  "Remove" rather than kept around as `[]`. */
+  assignedByColumn?: Record<string, string[]>;
   createdAt: Date | string;
   updatedAt: Date | string;
 }

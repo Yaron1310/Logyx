@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { FiX, FiRotateCcw, FiLoader, FiInbox } from 'react-icons/fi';
+import { FiX, FiRotateCcw, FiLoader, FiInbox, FiAlertCircle } from 'react-icons/fi';
 import { useArchivedGroups, useGroups, useRestoreGroup } from '../../hooks/queries/useGroupQueries';
 import { useItems, useRestoreItem } from '../../hooks/queries/useItemQueries';
 
@@ -10,10 +10,10 @@ interface BoardArchiveModalProps {
 }
 
 const BoardArchiveModal: React.FC<BoardArchiveModalProps> = ({ boardId, onClose }) => {
-  const { data: archivedGroups = [], isLoading: groupsLoading } = useArchivedGroups(boardId);
+  const { data: archivedGroups = [], isLoading: groupsLoading, isError: groupsErrored, refetch: refetchGroups } = useArchivedGroups(boardId);
   const { data: activeGroups = [] } = useGroups(boardId);
 
-  const { data: archivedItems = [], isLoading: itemsLoading } = useItems(
+  const { data: archivedItems = [], isLoading: itemsLoading, isError: itemsErrored, refetch: refetchItems } = useItems(
     { boardId, includeArchived: true, limit: 500 },
     !!boardId,
     (page) => page.data.filter((i) => i.isArchived),
@@ -46,6 +46,7 @@ const BoardArchiveModal: React.FC<BoardArchiveModalProps> = ({ boardId, onClose 
   };
 
   const isLoading = groupsLoading || itemsLoading;
+  const isErrored = groupsErrored || itemsErrored;
   const isEmpty = archivedGroups.length === 0 && archivedItems.length === 0;
 
   return ReactDOM.createPortal(
@@ -74,6 +75,18 @@ const BoardArchiveModal: React.FC<BoardArchiveModalProps> = ({ boardId, onClose 
           {isLoading ? (
             <div className="flex justify-center py-12" role="status" aria-label="Loading archived items">
               <FiLoader className="animate-spin text-indigo-500" size={24} aria-hidden="true" />
+            </div>
+          ) : isErrored ? (
+            <div className="flex flex-col items-center py-12 text-red-500 gap-3" role="alert">
+              <FiAlertCircle size={32} aria-hidden="true" />
+              <p className="text-sm text-center">Couldn't load archived items. Please try again.</p>
+              <button
+                type="button"
+                onClick={() => { void refetchGroups(); void refetchItems(); }}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Retry
+              </button>
             </div>
           ) : isEmpty ? (
             <div className="flex flex-col items-center py-12 text-gray-400 gap-2">

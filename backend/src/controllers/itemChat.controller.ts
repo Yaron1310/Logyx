@@ -6,21 +6,9 @@ import { itemsCollection, itemChatMessagesCollection, boardMembersCollection, us
 import { JwtUserPayload, DBItem, DBUser, DBBoardMember, DBChatMessage, DBChatAttachment, DBColumn, ColumnType } from '../types/index.js';
 import { assertItemAccess } from '../utils/workManagementAuth.js';
 import { sendChatMentionEmail } from '../services/email.service.js';
+import { ALLOWED_ATTACHMENT_MIME_TYPES, buildContentDisposition } from '../utils/allowedFileTypes.js';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
-
-const ALLOWED_MIME_TYPES = new Set([
-  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'text/plain',
-  'text/csv',
-]);
 
 function isAuthError(err: unknown): err is { status: number; message: string } {
   return typeof err === 'object' && err !== null && 'status' in err && 'message' in err;
@@ -73,7 +61,7 @@ export const uploadChatFile = async (req: Request, res: Response) => {
     ? decodeURIComponent(rawFilename).trim()
     : 'file';
 
-  if (!ALLOWED_MIME_TYPES.has(mimeType)) {
+  if (!ALLOWED_ATTACHMENT_MIME_TYPES.has(mimeType)) {
     return res.status(400).json({ message: `File type not allowed: ${mimeType}` });
   }
   if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
@@ -98,7 +86,7 @@ export const uploadChatFile = async (req: Request, res: Response) => {
     const storageFile = storage.bucket().file(storagePath);
 
     await storageFile.save(req.body, {
-      metadata: { contentType: mimeType },
+      metadata: { contentType: mimeType, contentDisposition: buildContentDisposition(filename) },
       public: true,
     });
 

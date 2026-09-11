@@ -347,7 +347,11 @@ const BoardContent: React.FC<BoardContentProps> = ({
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
           >
-            <div className="p-4" role="region" aria-label="Board groups">
+            {/* w-max: same reasoning as GroupSection's own root — without it this div's box
+                stays only as wide as the viewport (children overflow it instead of growing
+                it), which caps how far any `sticky left-4` element inside can stick before
+                running out of room and scrolling away. */}
+            <div className="p-4 w-max" role="region" aria-label="Board groups">
               {canManageStructure && !board.isArchived && !groupsLoading && localGroups.length > 0 && (
                 showAddGroupTop && boardId ? (
                   <AddGroupForm
@@ -403,6 +407,27 @@ const BoardContent: React.FC<BoardContentProps> = ({
               {canManageStructure && !board.isArchived && showAddGroup && boardId && (
                 <AddGroupForm boardId={boardId} onClose={() => setShowAddGroup(false)} />
               )}
+
+              {/* Kept inside this div (rather than as a sibling after DndContext) so its sticky
+                  button shares this container's w-max width — see the note on that class above.
+                  A div that only wraps this one small button has no wide content of its own to
+                  size itself to, so its "sticky left-4" would immediately run out of room to
+                  stick, the same bug this file's w-max additions fix for the group titles. */}
+              {canManageStructure && !board.isArchived && !showAddGroup && (
+                <div className="pt-2">
+                  <div className="sticky left-4 w-fit">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddGroup(true)}
+                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 border border-dashed border-gray-300 rounded-lg hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                      aria-label="Add new group"
+                    >
+                      <FiPlus size={15} aria-hidden="true" />
+                      Add Group
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <DragOverlay>
@@ -426,22 +451,6 @@ const BoardContent: React.FC<BoardContentProps> = ({
               )}
             </DragOverlay>
           </DndContext>
-
-          {canManageStructure && !board.isArchived && !showAddGroup && (
-            <div className="px-4 pb-6">
-              <div className="sticky left-4 w-max">
-                <button
-                  type="button"
-                  onClick={() => setShowAddGroup(true)}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 border border-dashed border-gray-300 rounded-lg hover:border-indigo-400 hover:text-indigo-600 transition-colors"
-                  aria-label="Add new group"
-                >
-                  <FiPlus size={15} aria-hidden="true" />
-                  Add Group
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Growing spacer: when the board is shorter than the viewport, this fills the
               gap so the flex column pushes the total row to the very bottom of the screen.

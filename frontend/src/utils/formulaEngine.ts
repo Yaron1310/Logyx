@@ -13,7 +13,9 @@
  */
 
 import { ColumnType } from '../types';
+import type { HoursLogEntry } from '../types';
 import { formulaRefLog, sameColumnTrace } from './formulaDebug';
+import { sumHoursLogMinutes } from './hoursLog';
 
 export type ColumnValues = Record<string, number | null | undefined>;
 
@@ -104,8 +106,8 @@ function mergedDays(intervals: { s: number; e: number }[]): number {
 
 /**
  * Numeric group-summary matching GroupSummaryRow's aggregation, for any column type:
- * count works for every type; NUMBER/TIME/TIME_RANGE produce numeric aggregates. Returns null
- * for combinations with no numeric meaning (e.g. avg of a text column).
+ * count works for every type; NUMBER/TIME/TIME_RANGE/HOURS_LOG produce numeric aggregates.
+ * Returns null for combinations with no numeric meaning (e.g. avg of a text column).
  *
  * SIMPLE_FORMULA columns hold formula text, not values, so they can only be aggregated when the
  * caller supplies `evalRow` — a per-row evaluator producing that cell's live computed value (null
@@ -153,6 +155,19 @@ export function computeSummaryNumeric(
     if (calc === 'sum') return iv.length ? mergedDays(iv) : null;
     const days = iv.map(({ s, e }) => Math.max(1, Math.round((e - s) / 86_400_000) + 1));
     return aggregateSummary(days, calc);
+  }
+  if (type === ColumnType.HOURS_LOG) {
+    // Per-row totals in decimal hours — same unit as a direct single-cell HOURS_LOG reference
+    // (see resolveLocalById), so {ref} * hourlyRate behaves the same whether it names one cell
+    // or a group total.
+    const vals = rows
+      .map((r) => {
+        const entries = getVal(r, columnId);
+        if (!Array.isArray(entries) || entries.length === 0) return null;
+        return sumHoursLogMinutes(entries as HoursLogEntry[]) / 60;
+      })
+      .filter((n): n is number => n !== null);
+    return aggregateSummary(vals, calc);
   }
   return null;
 }
@@ -475,7 +490,7 @@ class FormulaParser {
     sameColumnTrace('2. found the column', { columnId: col.id, type: col.type });
     // A reference to another formula cell resolves to its live computed value.
     if (col.type === ColumnType.SIMPLE_FORMULA) return this.resolveLocalFormula(ref, col);
-    if (col.type !== ColumnType.NUMBER) {
+    if (col.type !== ColumnType.NUMBER && col.type !== ColumnType.HOURS_LOG) {
       sameColumnTrace('3. HANDS TO LOADER — column is neither a number nor a formula', { type: col.type });
       return undefined;
     }
@@ -490,6 +505,11 @@ class FormulaParser {
     if (!item) return undefined;
 
     const val = item.values[col.id];
+    // An HOURS_LOG cell's numeric value is its running total, in decimal hours (e.g. 16:15 -> 16.25)
+    // — the natural unit for a formula like {ref} * hourlyRate.
+    if (col.type === ColumnType.HOURS_LOG) {
+      return sumHoursLogMinutes(Array.isArray(val) ? (val as HoursLogEntry[]) : []) / 60;
+    }
     return val != null && !isNaN(Number(val)) ? Number(val) : 0;
   }
 
