@@ -383,11 +383,16 @@ const PersonalHubBoardGroup: React.FC<Props> = ({ boardId, items, isOwn, ownerUs
                       {/* Sub-division within this board group — the source-board group each
                           item actually belongs to. Only rendered once there's more than one
                           to tell apart (see groupedClusters above); a single-group board
-                          stays exactly as it looked before this existed. */}
+                          stays exactly as it looked before this existed. Full-width row (not
+                          just the sticky label) so the top/bottom border spans the table like
+                          every other row, instead of stopping short at the label's own width. */}
                       <div
-                        className="sticky left-4 w-fit flex items-center gap-1.5 pt-2 pb-1 pl-1"
+                        role="row"
                         aria-label={`Sub-group: ${group?.name ?? 'Other'}, ${clusterItems.length} items`}
+                        className="w-max border-t border-b border-[#d2d2d4] bg-gray-50/60"
+                        style={groupMinWidth ? { minWidth: `${groupMinWidth}px` } : undefined}
                       >
+                      <div className="sticky left-4 w-fit flex items-center gap-1.5 py-1.5 pl-1">
                         <span
                           className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                           aria-hidden="true"
@@ -397,6 +402,7 @@ const PersonalHubBoardGroup: React.FC<Props> = ({ boardId, items, isOwn, ownerUs
                           {group?.name ?? 'Other'}
                         </h3>
                         <span className="text-[11px] text-gray-400" aria-hidden="true">{clusterItems.length}</span>
+                      </div>
                       </div>
                       {clusterItems.map((item) => (
                         <ItemRow
