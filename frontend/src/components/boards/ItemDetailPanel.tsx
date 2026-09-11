@@ -9,7 +9,7 @@ import type { Item } from '../../types';
 import { ColumnCell } from './cells';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { formatItemName } from '../../utils/formatItemName';
-import { getUnreadCount } from './ItemChatModal';
+import { getUnreadCount, hasReadMessages } from './ItemChatModal';
 import { useBoardRender } from '../../contexts/BoardRenderContext';
 
 interface ItemDetailPanelProps {
@@ -35,6 +35,7 @@ const ItemDetailPanel: React.FC<ItemDetailPanelProps> = ({ item: initialItem, on
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const unreadCount = user ? getUnreadCount(user.id, item) : 0;
+  const readMessages = user ? hasReadMessages(user.id, item) : false;
   const formSubmitted = item.formSubmitted === true;
   const nameInputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -178,6 +179,12 @@ const ItemDetailPanel: React.FC<ItemDetailPanelProps> = ({ item: initialItem, on
               >
                 {unreadCount > 99 ? '99+' : unreadCount}
               </span>
+            )}
+            {unreadCount === 0 && readMessages && (
+              <span
+                className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-gray-300 rounded-full"
+                aria-label="This item has messages, all read"
+              />
             )}
           </button>
           </>

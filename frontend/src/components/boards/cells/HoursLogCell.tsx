@@ -1,12 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FiPlus, FiTrash2 } from 'react-icons/fi';
-import { useUpdateItem } from '../../../hooks/queries/useItemQueries';
+import { useUpdateItem, useGroupItems } from '../../../hooks/queries/useItemQueries';
+import { useSubitemGroup } from '../../../hooks/queries/useGroupQueries';
+import { useSubitemColumns } from '../../../hooks/queries/useColumnQueries';
 import { useUndo } from '../../../contexts/UndoContext';
 import { useFormulaRecording } from '../../../contexts/FormulaRecordingContext';
 import { formulaRefDomKey } from '../../../utils/formulaEngine';
 import { HOURS_LOG_MINUTE_STEPS, formatHoursLogDuration, formatHoursLogTimestamp, sumHoursLogMinutes } from '../../../utils/hoursLog';
-import type { Item, Column, HoursLogEntry } from '../../../types';
+import { ColumnType } from '../../../types';
+import type { Item, Column, HoursLogEntry, HoursLogColumnSettings } from '../../../types';
 import CellWrapper from './CellWrapper';
 
 interface Props { item: Item; column: Column }
@@ -214,7 +217,27 @@ const HoursLogCellInner: React.FC<Props> = ({ item, column }) => {
   // the view defaults to 'list'/'picker' below based on whether the cell already has entries.
   const [forcedView, setForcedView] = useState<'picker' | null>(null);
 
-  const totalMinutes = sumHoursLogMinutes(rawValue);
+  // "Subitems only" — this top-level column auto-mirrors into every subitem group. Once this
+  // item has subitems, its own cell goes read-only and shows their combined total instead.
+  const isSubitemsOnly = !column.parentGroupId && (column.settings as HoursLogColumnSettings).subitemsOnly === true;
+  const { data: subitemGroup } = useSubitemGroup(item.boardId, item.id, isSubitemsOnly);
+  const { data: subitemColumns = [] } = useSubitemColumns(item.boardId, subitemGroup?.id ?? '', isSubitemsOnly && !!subitemGroup);
+  const mirroredColumn = subitemColumns.find(
+    (c) => c.type === ColumnType.HOURS_LOG && (c.settings as HoursLogColumnSettings).mirroredFromColumnId === column.id,
+  );
+  const { data: subitemsPage } = useGroupItems(
+    subitemGroup?.id ?? '',
+    undefined,
+    500,
+    isSubitemsOnly && !!subitemGroup && !!mirroredColumn,
+  );
+  const subitems = subitemsPage?.data ?? [];
+  const hasSubitems = isSubitemsOnly && !!subitemGroup && subitems.length > 0;
+  const subitemsTotalMinutes = mirroredColumn
+    ? subitems.reduce((sum, si) => sum + sumHoursLogMinutes(si.values[mirroredColumn.id] as HoursLogEntry[] | undefined), 0)
+    : 0;
+
+  const totalMinutes = hasSubitems ? subitemsTotalMinutes : sumHoursLogMinutes(rawValue);
 
   const commitEntries = (next: HoursLogEntry[], label: string) => {
     pushUndo({ label, undo: () => mutate({ id: item.id, patch: { values: { [column.id]: rawValue } } }) });
@@ -239,6 +262,26 @@ const HoursLogCellInner: React.FC<Props> = ({ item, column }) => {
             data-formula-cell-key={formulaRefDomKey({ kind: 'b', boardId: item.boardId, columnId: column.id, itemId: item.id })}
           >
             {totalMinutes > 0 ? formatHoursLogDuration(totalMinutes) : <span className="text-gray-300 text-xs">—</span>}
+          </div>
+        )}
+      </CellWrapper>
+    );
+  }
+
+  // Item has subitems and this column mirrors into them — show their total, read-only. No
+  // entries can be logged on the parent itself while it's rolling up its subitems' hours.
+  if (hasSubitems) {
+    return (
+      <CellWrapper column={column} isReadOnly>
+        {() => (
+          <div
+            className="px-3 py-2 text-sm text-gray-700 truncate w-full text-center"
+            title="Total logged hours across this item's subitems"
+            aria-label={`${column.name} total across subitems for ${item.name}`}
+          >
+            {totalMinutes > 0
+              ? formatHoursLogDuration(totalMinutes)
+              : <span className="text-gray-300 text-xs">—</span>}
           </div>
         )}
       </CellWrapper>

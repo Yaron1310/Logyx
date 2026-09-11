@@ -84,6 +84,13 @@ export function getUnreadCount(userId: string, item: Item): number {
   return Math.max(0, total - seen);
 }
 
+/** True when the item has at least one chat message but the given user has read all of them —
+ *  used to show a neutral "has messages" indicator instead of no badge at all. */
+export function hasReadMessages(userId: string, item: Item): boolean {
+  const total = item.chatMessageCount ?? 0;
+  return total > 0 && getUnreadCount(userId, item) === 0;
+}
+
 interface ItemChatModalProps {
   item: Item;
   onClose: () => void;

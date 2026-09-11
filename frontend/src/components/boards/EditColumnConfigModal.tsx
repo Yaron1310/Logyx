@@ -19,7 +19,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useUpdateColumn } from '../../hooks/queries/useColumnQueries';
 import { useUpdatePersonalColumn } from '../../hooks/queries/usePersonalHubQueries';
-import { ColumnType } from '../../types';
+import { useAuthSession } from '../../hooks/useAuthSession';
+import { ColumnType, UserRole } from '../../types';
 import type {
   Column,
   PersonalColumn,
@@ -30,6 +31,7 @@ import type {
   StatusColumnSettings,
   DropdownColumnSettings,
   SimpleFormulaColumnSettings,
+  HoursLogColumnSettings,
   ColumnVisibility,
 } from '../../types';
 import { COLUMN_VISIBILITY_OPTIONS, DEFAULT_COLUMN_VISIBILITY } from '../../utils/columnVisibilityOptions';
@@ -134,10 +136,18 @@ const EditColumnConfigModal: React.FC<EditColumnConfigModalProps> = ({ boardId, 
   const { mutateAsync: updatePersonalColumn, isPending: isPendingPersonal } = useUpdatePersonalColumn(personalOwnerId);
   const isPending = isPersonal ? isPendingPersonal : isPendingBoard;
   const [error, setError] = useState('');
+  const { user } = useAuthSession();
+  const isOrgAdmin =
+    user?.role === UserRole.ORGANIZATION_ADMIN || user?.role === UserRole.SYSTEM_ADMIN;
 
   // VISIBILITY (top-level board columns only — personal/subitem columns don't carry it)
   const isSubitemColumn = !isPersonal && !!(column as Column).parentGroupId;
   const showVisibility = !isPersonal && !isSubitemColumn;
+
+  // HOURS_LOG — "Subitems only" (org admins, top-level columns only)
+  const hoursLogSettings = column.settings as HoursLogColumnSettings;
+  const showSubitemsOnly = !isPersonal && !isSubitemColumn && isOrgAdmin && column.type === ColumnType.HOURS_LOG;
+  const [subitemsOnly, setSubitemsOnly] = useState(hoursLogSettings.subitemsOnly ?? false);
   const [visibility, setVisibility] = useState<ColumnVisibility>(
     (column as Column).visibility ?? DEFAULT_COLUMN_VISIBILITY,
   );
@@ -250,6 +260,8 @@ const EditColumnConfigModal: React.FC<EditColumnConfigModalProps> = ({ boardId, 
         return { options: statusOptions, ...(defaultStatusId ? { defaultStatusId } : {}) };
       case ColumnType.DROPDOWN:
         return { options: dropdownOptions, multiple: dropdownMultiple };
+      case ColumnType.HOURS_LOG:
+        return { ...(subitemsOnly ? { subitemsOnly: true } : {}) };
       default:
         return column.settings;
     }
@@ -283,6 +295,7 @@ const EditColumnConfigModal: React.FC<EditColumnConfigModalProps> = ({ boardId, 
     [ColumnType.STATUS]: 'Status Settings',
     [ColumnType.DROPDOWN]: 'Dropdown Settings',
     [ColumnType.SIMPLE_FORMULA]: 'Formula Settings',
+    [ColumnType.HOURS_LOG]: 'Hours Log Settings',
   };
 
   const modalRoot = document.getElementById('modal-root');
@@ -564,6 +577,27 @@ const EditColumnConfigModal: React.FC<EditColumnConfigModalProps> = ({ boardId, 
                   />
                   Allow multiple selections
                 </label>
+              </div>
+            )}
+
+            {/* HOURS_LOG */}
+            {showSubitemsOnly && (
+              <div className="space-y-1">
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={subitemsOnly}
+                    onChange={(e) => setSubitemsOnly(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    aria-label="Subitems only"
+                  />
+                  Subitems only
+                </label>
+                <p className="text-xs text-gray-500">
+                  When an item has subitems, this column is auto-added to them and the item's own
+                  cell shows only their total — hours can no longer be logged on the item directly.
+                  New subitems pick this up automatically; existing ones don't get it retroactively.
+                </p>
               </div>
             )}
 

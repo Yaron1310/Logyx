@@ -240,7 +240,18 @@ export interface SimpleFormulaColumnSettings {
 
 export type LinkColumnSettings = Record<string, never>;
 
-export type HoursLogColumnSettings = Record<string, never>;
+export interface HoursLogColumnSettings {
+  /** Org-admin-only. Top-level HOURS_LOG columns only. When true, this column is auto-added to
+   *  every subitem group (existing subitem groups when the box is first checked, and any new
+   *  ones created afterward). Once a parent item has subitems, its own cell for this column
+   *  becomes read-only, showing the sum of its subitems' entries instead of accepting new
+   *  entries directly. */
+  subitemsOnly?: boolean;
+  /** Set only on a column auto-created on a subitem group by the above — the id of the
+   *  top-level HOURS_LOG column it mirrors, so the parent's cell can find the matching
+   *  subitem-group column to sum. */
+  mirroredFromColumnId?: string;
+}
 
 export type FilesColumnSettings = Record<string, never>;
 

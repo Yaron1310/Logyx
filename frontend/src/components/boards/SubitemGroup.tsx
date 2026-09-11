@@ -3,7 +3,7 @@ import { FiPlus, FiLoader, FiTrash2, FiMessageSquare, FiFileText, FiMoreVertical
 import AddColumnModal from './AddColumnModal';
 import EditColumnConfigModal from './EditColumnConfigModal';
 import { useQueryClient } from '@tanstack/react-query';
-import { useSubitemColumns, useDeleteColumn, useUpdateColumn } from '../../hooks/queries/useColumnQueries';
+import { useColumns, useSubitemColumns, useDeleteColumn, useUpdateColumn } from '../../hooks/queries/useColumnQueries';
 import { useSubitemGroup, useDeleteGroup } from '../../hooks/queries/useGroupQueries';
 import { useGroupItems, useCreateItem, useArchiveItem, useUpdateItem } from '../../hooks/queries/useItemQueries';
 import { useCreateColumn } from '../../hooks/queries/useColumnQueries';
@@ -12,10 +12,10 @@ import { queryKeys } from '../../hooks/queries/queryKeys';
 import { useAuthSession } from '../../hooks/useAuthSession';
 import { useBoardRender } from '../../contexts/BoardRenderContext';
 import { ColumnType } from '../../types';
-import type { Column, Item } from '../../types';
+import type { Column, HoursLogColumnSettings, Item } from '../../types';
 import { COLUMN_TYPE_ICONS } from './ColumnHeader';
 import { ColumnCell } from './cells';
-import { getUnreadCount } from './ItemChatModal';
+import { getUnreadCount, hasReadMessages } from './ItemChatModal';
 import { calculateColumnWidth } from '../../utils/columnWidths';
 import FlippedMenu from '../common/FlippedMenu';
 
@@ -251,6 +251,7 @@ const SubitemRow: React.FC<{ item: Item; columns: Column[]; canManageItems: bool
   };
 
   const unreadCount = user ? getUnreadCount(user.id, item) : 0;
+  const readMessages = user ? hasReadMessages(user.id, item) : false;
   const formSubmitted = item.formSubmitted === true;
 
   // Mirrors ItemRow's gating for top-level rows, and the backend's own split: renaming is
@@ -329,6 +330,12 @@ const SubitemRow: React.FC<{ item: Item; columns: Column[]; canManageItems: bool
               {unreadCount > 9 ? '9+' : unreadCount}
             </span>
           )}
+          {unreadCount === 0 && readMessages && (
+            <span
+              className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-gray-300 rounded-full"
+              aria-label="This item has messages, all read"
+            />
+          )}
         </button>
         </>
         )}
@@ -387,6 +394,7 @@ const SubitemGroup: React.FC<SubitemGroupProps> = ({ boardId, workspaceId, paren
   const { mutateAsync: deleteGroup } = useDeleteGroup();
 
   const { data: subitemGroup, isLoading: groupLoading } = useSubitemGroup(boardId, parentItemId);
+  const { data: boardColumns = [] } = useColumns(boardId);
 
   const { data: columns = [], isLoading: columnsLoading } = useSubitemColumns(
     boardId,
@@ -427,6 +435,20 @@ const SubitemGroup: React.FC<SubitemGroupProps> = ({ boardId, workspaceId, paren
         await createColumn({ name: 'Person', type: ColumnType.PERSON, settings: { multiple: true }, parentGroupId: group.id });
         await createColumn({ name: 'Status', type: ColumnType.STATUS, settings: { options: DEFAULT_STATUS_OPTIONS }, parentGroupId: group.id });
         await createColumn({ name: 'Date', type: ColumnType.DATE, settings: {}, parentGroupId: group.id });
+
+        // Any top-level HOURS_LOG column marked "Subitems only" gets auto-added here too, so
+        // a brand-new subitem group starts with it already present.
+        const mirroredHoursLogColumns = boardColumns.filter(
+          (col) => col.type === ColumnType.HOURS_LOG && (col.settings as HoursLogColumnSettings).subitemsOnly,
+        );
+        for (const col of mirroredHoursLogColumns) {
+          await createColumn({
+            name: col.name,
+            type: ColumnType.HOURS_LOG,
+            settings: { mirroredFromColumnId: col.id },
+            parentGroupId: group.id,
+          });
+        }
 
         await qc.invalidateQueries({ queryKey: queryKeys.groups.subitem(boardId, parentItemId) });
         await qc.invalidateQueries({ queryKey: queryKeys.columns.subitem(boardId, group.id) });
